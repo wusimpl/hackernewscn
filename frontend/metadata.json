@@ -1,0 +1,5 @@
+{
+  "name": "HackerNews CN",
+  "description": "A bilingual Hacker News reader that translates headlines into Chinese in real-time.",
+  "requestFramePermissions": []
+}

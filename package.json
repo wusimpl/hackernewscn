@@ -1,0 +1,22 @@
+{
+  "name": "hackernews-cn",
+  "version": "1.0.0",
+  "description": "HackerNews CN - Full Stack Application",
+  "private": true,
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:all": "npm run dev:backend & npm run dev:frontend",
+    "build:backend": "cd backend && npm run build",
+    "build:frontend": "cd frontend && npm run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "start": "cd backend && npm start"
+  },
+  "keywords": [
+    "hackernews",
+    "translation",
+    "fullstack"
+  ],
+  "author": "",
+  "license": "MIT"
+}
