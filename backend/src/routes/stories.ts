@@ -11,6 +11,7 @@ import {
 } from '../db/repositories';
 import { StoryWithTranslation, ApiResponse, Story } from '../types';
 import { getSchedulerService } from '../services/scheduler';
+import { config } from '../config';
 
 const router = Router();
 
@@ -377,12 +378,12 @@ async function fetchAndStoreCommentsForStory(story: Story, customPrompt: string)
     const comments = await fetchStoryComments(story.id, kids);
     
     if (comments.length > 0) {
-      // 翻译前50条评论
+      // 翻译前N条评论（数量由配置决定）
       const { translateCommentsBatch } = await import('../services/llm');
-      const MAX_COMMENTS = 50;
+      const maxComments = config.commentTranslation.maxComments;
       const commentsToTranslate = comments
         .filter(c => c.text && c.text.trim().length > 0 && !c.deleted && !c.dead)
-        .slice(0, MAX_COMMENTS);
+        .slice(0, maxComments);
 
       let translations: { comment_id: number; text_en: string; text_zh: string }[] = [];
       

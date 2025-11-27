@@ -582,9 +582,9 @@ export class SchedulerService {
     comments: Omit<import('../types').CommentRecord, 'fetched_at'>[],
     customPrompt: string
   ): Promise<{ comment_id: number; text_en: string; text_zh: string }[]> {
-    // 按树结构顺序获取前50条有文本内容的评论（包括嵌套评论）
-    const MAX_COMMENTS_TO_TRANSLATE = 50;
-    const commentsWithText = this.getFirst50CommentsInTreeOrder(comments, storyId, MAX_COMMENTS_TO_TRANSLATE);
+    // 按树结构顺序获取前N条有文本内容的评论（包括嵌套评论）
+    const maxComments = config.commentTranslation.maxComments;
+    const commentsWithText = this.getCommentsInTreeOrder(comments, storyId, maxComments);
 
     if (commentsWithText.length === 0) {
       console.log(`[Scheduler] Story ${storyId} has no comments to translate`);
@@ -632,7 +632,7 @@ export class SchedulerService {
    * @param limit 最大数量
    * @returns 前N条有文本内容的评论
    */
-  private getFirst50CommentsInTreeOrder(
+  private getCommentsInTreeOrder(
     comments: Omit<import('../types').CommentRecord, 'fetched_at'>[],
     storyId: number,
     limit: number

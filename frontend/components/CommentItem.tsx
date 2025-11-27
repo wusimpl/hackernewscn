@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { CommentTreeNode } from '../types';
 
 interface CommentItemProps {
@@ -22,17 +22,28 @@ const timeAgo = (timestamp: number): string => {
   return Math.floor(seconds) + " 秒前";
 };
 
+// Count total replies in a comment tree
+const countReplies = (comment: CommentTreeNode): number => {
+  if (!comment.children || comment.children.length === 0) return 0;
+  return comment.children.reduce((sum, child) => sum + 1 + countReplies(child), 0);
+};
+
 // Maximum indentation depth to prevent excessive nesting
-const MAX_INDENT_DEPTH = 5;
-const INDENT_PX = 12; // pixels per indent level
+const MAX_INDENT_DEPTH = 4;
+const INDENT_PX = 16; // pixels per indent level
 
 export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
+  const isDeepNested = depth >= MAX_INDENT_DEPTH;
+  // Deep nested comments are collapsed by default
+  const [isCollapsed, setIsCollapsed] = useState(isDeepNested);
+  
   // Calculate indentation - cap at MAX_INDENT_DEPTH to prevent excessive nesting
   const indentLevel = Math.min(depth, MAX_INDENT_DEPTH);
   const indentPx = indentLevel * INDENT_PX;
-  const isDeepNested = depth > MAX_INDENT_DEPTH;
 
   const hasTranslation = !!comment.translatedText;
+  const hasChildren = comment.children && comment.children.length > 0;
+  const replyCount = hasChildren ? countReplies(comment) : 0;
 
   // Handle deleted or dead comments
   if (comment.deleted || comment.dead) {
@@ -44,9 +55,9 @@ export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
           </p>
         </div>
         {/* Still render children if any */}
-        {comment.children && comment.children.length > 0 && (
+        {hasChildren && !isCollapsed && (
           <div>
-            {comment.children.map(child => (
+            {comment.children!.map(child => (
               <CommentItem key={child.id} comment={child} depth={depth + 1} />
             ))}
           </div>
@@ -66,10 +77,10 @@ export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
           <span className="text-[#666] text-xs">
             {timeAgo(comment.time)}
           </span>
-          {/* Show reply indicator for deeply nested comments */}
+          {/* Show deep reply indicator */}
           {isDeepNested && (
-            <span className="text-[#666] text-xs">
-              <span className="text-[#888]">↩</span> 深层回复
+            <span className="text-[#555] text-xs bg-[#222] px-1.5 py-0.5 rounded">
+              深层回复
             </span>
           )}
         </div>
@@ -99,12 +110,25 @@ export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
             dangerouslySetInnerHTML={{ __html: comment.text }}
           />
         )}
+
+        {/* Collapse/Expand button for comments with children */}
+        {hasChildren && (
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="mt-2 text-xs text-[#666] hover:text-[#ff6600] transition-colors flex items-center gap-1"
+          >
+            <span className="text-[#888]">{isCollapsed ? '▶' : '▼'}</span>
+            {isCollapsed 
+              ? `展开 ${replyCount} 条回复` 
+              : '收起回复'}
+          </button>
+        )}
       </div>
 
-      {/* Render children recursively */}
-      {comment.children && comment.children.length > 0 && (
+      {/* Render children recursively - only when not collapsed */}
+      {hasChildren && !isCollapsed && (
         <div>
-          {comment.children.map(child => (
+          {comment.children!.map(child => (
             <CommentItem key={child.id} comment={child} depth={depth + 1} />
           ))}
         </div>

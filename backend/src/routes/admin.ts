@@ -11,6 +11,7 @@ const router = Router();
 const schedulerConfigSchema = z.object({
   interval: z.number().min(60000).max(86400000).optional(), // 1分钟到24小时
   storyLimit: z.number().min(10).max(100).optional(), // 10到100条
+  maxCommentTranslations: z.number().min(10).max(200).optional(), // 10到200条评论
 });
 
 /**
@@ -85,19 +86,23 @@ router.get('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
     // 从 .env 读取当前配置
     const intervalEnv = getEnvVar('SCHEDULER_INTERVAL');
     const storyLimitEnv = getEnvVar('SCHEDULER_STORY_LIMIT');
+    const maxCommentTranslationsEnv = getEnvVar('MAX_COMMENT_TRANSLATIONS');
 
     // 默认值
     const DEFAULT_INTERVAL = 300000; // 5分钟
     const DEFAULT_STORY_LIMIT = 30;
+    const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
 
     res.json({
       success: true,
       data: {
         interval: intervalEnv ? parseInt(intervalEnv, 10) : DEFAULT_INTERVAL,
         storyLimit: storyLimitEnv ? parseInt(storyLimitEnv, 10) : DEFAULT_STORY_LIMIT,
+        maxCommentTranslations: maxCommentTranslationsEnv ? parseInt(maxCommentTranslationsEnv, 10) : DEFAULT_MAX_COMMENT_TRANSLATIONS,
         defaults: {
           interval: DEFAULT_INTERVAL,
           storyLimit: DEFAULT_STORY_LIMIT,
+          maxCommentTranslations: DEFAULT_MAX_COMMENT_TRANSLATIONS,
         },
       },
     });
@@ -125,6 +130,11 @@ router.put('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
       console.log(`[Admin] 抓取数量已更新为 ${body.storyLimit}`);
     }
 
+    if (body.maxCommentTranslations !== undefined) {
+      updateEnvVar('MAX_COMMENT_TRANSLATIONS', body.maxCommentTranslations.toString());
+      console.log(`[Admin] 评论翻译数量已更新为 ${body.maxCommentTranslations}`);
+    }
+
     // 重新加载配置并重启调度器
     reloadSchedulerConfig();
     scheduler.restart();
@@ -135,6 +145,7 @@ router.put('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
         message: '调度配置已更新',
         interval: body.interval,
         storyLimit: body.storyLimit,
+        maxCommentTranslations: body.maxCommentTranslations,
       },
     });
   } catch (error) {
@@ -153,10 +164,12 @@ router.post('/scheduler-config/reset', requireAdminAuth, async (req: Request, re
     // 默认值
     const DEFAULT_INTERVAL = 300000; // 5分钟
     const DEFAULT_STORY_LIMIT = 30;
+    const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
 
     // 从 .env 删除自定义配置
     deleteEnvVar('SCHEDULER_INTERVAL');
     deleteEnvVar('SCHEDULER_STORY_LIMIT');
+    deleteEnvVar('MAX_COMMENT_TRANSLATIONS');
 
     console.log('[Admin] 调度配置已重置为默认值');
 
@@ -170,6 +183,7 @@ router.post('/scheduler-config/reset', requireAdminAuth, async (req: Request, re
         message: '调度配置已重置为默认值',
         interval: DEFAULT_INTERVAL,
         storyLimit: DEFAULT_STORY_LIMIT,
+        maxCommentTranslations: DEFAULT_MAX_COMMENT_TRANSLATIONS,
       },
     });
   } catch (error) {

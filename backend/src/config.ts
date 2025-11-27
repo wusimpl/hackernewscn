@@ -33,6 +33,11 @@ export const config = {
     storyLimit: parseInt(process.env.SCHEDULER_STORY_LIMIT || '30', 10), // 默认 30 条
   },
 
+  // 评论翻译配置
+  commentTranslation: {
+    maxComments: parseInt(process.env.MAX_COMMENT_TRANSLATIONS || '50', 10), // 默认 50 条
+  },
+
   // 速率限制配置
   rateLimit: {
     windowMs: 60 * 1000, // 1分钟
@@ -53,7 +58,8 @@ export const config = {
 export function reloadSchedulerConfig(): void {
   config.scheduler.interval = parseInt(process.env.SCHEDULER_INTERVAL || '300000', 10);
   config.scheduler.storyLimit = parseInt(process.env.SCHEDULER_STORY_LIMIT || '30', 10);
-  console.log(`[Config] 调度器配置已重新加载: interval=${config.scheduler.interval}ms, storyLimit=${config.scheduler.storyLimit}`);
+  config.commentTranslation.maxComments = parseInt(process.env.MAX_COMMENT_TRANSLATIONS || '50', 10);
+  console.log(`[Config] 调度器配置已重新加载: interval=${config.scheduler.interval}ms, storyLimit=${config.scheduler.storyLimit}, maxComments=${config.commentTranslation.maxComments}`);
 }
 
 // 验证必需的环境变量

@@ -15,9 +15,11 @@ interface SchedulerStatus {
 interface SchedulerConfig {
   interval: number;
   storyLimit: number;
+  maxCommentTranslations: number;
   defaults: {
     interval: number;
     storyLimit: number;
+    maxCommentTranslations: number;
   };
 }
 
@@ -35,6 +37,7 @@ export const AdminPanel: React.FC = () => {
   const [schedulerConfig, setSchedulerConfig] = useState<SchedulerConfig | null>(null);
   const [intervalMinutes, setIntervalMinutes] = useState('');
   const [storyLimit, setStoryLimit] = useState('');
+  const [maxCommentTranslations, setMaxCommentTranslations] = useState('');
   const [configLoading, setConfigLoading] = useState(false);
 
   // 提示词配置状态
@@ -88,6 +91,7 @@ export const AdminPanel: React.FC = () => {
         setSchedulerConfig(data.data);
         setIntervalMinutes((data.data.interval / 60000).toString());
         setStoryLimit(data.data.storyLimit.toString());
+        setMaxCommentTranslations(data.data.maxCommentTranslations.toString());
       }
     } catch {
       // ignore
@@ -133,6 +137,7 @@ export const AdminPanel: React.FC = () => {
     try {
       const interval = parseFloat(intervalMinutes) * 60000;
       const limit = parseInt(storyLimit, 10);
+      const commentLimit = parseInt(maxCommentTranslations, 10);
 
       if (isNaN(interval) || interval < 60000 || interval > 86400000) {
         setError('间隔时间必须在 1 分钟到 24 小时之间');
@@ -146,13 +151,19 @@ export const AdminPanel: React.FC = () => {
         return;
       }
 
+      if (isNaN(commentLimit) || commentLimit < 10 || commentLimit > 200) {
+        setError('评论翻译数量必须在 10 到 200 之间');
+        setConfigLoading(false);
+        return;
+      }
+
       const res = await fetch(`${API_BASE}/admin/scheduler-config`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${password}`,
         },
-        body: JSON.stringify({ interval, storyLimit: limit }),
+        body: JSON.stringify({ interval, storyLimit: limit, maxCommentTranslations: commentLimit }),
       });
 
       if (res.ok) {
@@ -397,6 +408,25 @@ export const AdminPanel: React.FC = () => {
                   placeholder="10-100"
                 />
                 <p className="text-[#666] text-xs mt-1">范围: 10 ~ 100 条</p>
+              </div>
+              <div>
+                <label className="block text-[#828282] text-sm mb-1">
+                  每篇文章翻译评论数
+                  <span className="text-[#666] ml-2">
+                    默认: {schedulerConfig.defaults.maxCommentTranslations} 条
+                  </span>
+                </label>
+                <input
+                  type="number"
+                  value={maxCommentTranslations}
+                  onChange={(e) => setMaxCommentTranslations(e.target.value)}
+                  min="10"
+                  max="200"
+                  step="10"
+                  className="w-full bg-[#242424] text-[#dcdcdc] border border-[#444] p-2 focus:outline-none focus:border-[#ff6600]"
+                  placeholder="10-200"
+                />
+                <p className="text-[#666] text-xs mt-1">范围: 10 ~ 200 条</p>
               </div>
               <div className="flex gap-2">
                 <button
