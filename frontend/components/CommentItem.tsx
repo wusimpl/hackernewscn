@@ -90,11 +90,12 @@ export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
         {comment.text && (
           <div 
             className={`text-sm leading-relaxed comment-content
-              [&_a]:text-[#ff6600] [&_a]:no-underline hover:[&_a]:underline
-              [&_code]:text-[#ff9933] [&_code]:bg-[#222] [&_code]:px-1 [&_code]:rounded
+              [&_code]:bg-[#222] [&_code]:px-1 [&_code]:rounded
               [&_pre]:bg-[#222] [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-2
               [&_p]:my-1
-              ${hasTranslation ? 'text-[#666] text-xs mt-1' : 'text-[#c0c0c0]'}`}
+              ${hasTranslation 
+                ? 'text-[#666] text-xs mt-1 [&_a]:text-[#666] [&_a]:no-underline hover:[&_a]:underline [&_code]:text-[#888]' 
+                : 'text-[#c0c0c0] [&_a]:text-[#ff6600] [&_a]:no-underline hover:[&_a]:underline [&_code]:text-[#ff9933]'}`}
             dangerouslySetInnerHTML={{ __html: comment.text }}
           />
         )}
