@@ -23,12 +23,16 @@ const timeAgo = (timestamp: number): string => {
 };
 
 // Maximum indentation depth to prevent excessive nesting
-const MAX_INDENT_DEPTH = 8;
+const MAX_INDENT_DEPTH = 5;
+const INDENT_PX = 12; // pixels per indent level
 
 export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
   // Calculate indentation - cap at MAX_INDENT_DEPTH to prevent excessive nesting
   const indentLevel = Math.min(depth, MAX_INDENT_DEPTH);
-  const indentPx = indentLevel * 20; // 20px per level for better spacing
+  const indentPx = indentLevel * INDENT_PX;
+  const isDeepNested = depth > MAX_INDENT_DEPTH;
+
+  const hasTranslation = !!comment.translatedText;
 
   // Handle deleted or dead comments
   if (comment.deleted || comment.dead) {
@@ -55,23 +59,42 @@ export const CommentItem: React.FC<CommentItemProps> = ({ comment, depth }) => {
     <div style={{ paddingLeft: `${indentPx}px` }}>
       <div className="py-2 border-l-2 border-[#444] pl-3 mb-2 hover:border-[#ff6600] transition-colors">
         {/* Comment header: author and time */}
-        <div className="flex items-center gap-2 mb-1">
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
           <span className="text-[#ff6600] text-sm font-medium">
             {comment.author || '匿名'}
           </span>
           <span className="text-[#666] text-xs">
             {timeAgo(comment.time)}
           </span>
+          {/* Show reply indicator for deeply nested comments */}
+          {isDeepNested && (
+            <span className="text-[#666] text-xs">
+              <span className="text-[#888]">↩</span> 深层回复
+            </span>
+          )}
         </div>
         
-        {/* Comment text - render HTML safely */}
-        {comment.text && (
+        {/* Translated text - displayed first when available */}
+        {hasTranslation && (
           <div 
-            className="text-[#c0c0c0] text-sm leading-relaxed comment-content
+            className="text-[#e0e0e0] text-sm leading-relaxed comment-content
               [&_a]:text-[#ff6600] [&_a]:no-underline hover:[&_a]:underline
               [&_code]:text-[#ff9933] [&_code]:bg-[#222] [&_code]:px-1 [&_code]:rounded
               [&_pre]:bg-[#222] [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-2
               [&_p]:my-1"
+            dangerouslySetInnerHTML={{ __html: comment.translatedText! }}
+          />
+        )}
+
+        {/* Original text - always displayed below translation (dimmed when translation exists) */}
+        {comment.text && (
+          <div 
+            className={`text-sm leading-relaxed comment-content
+              [&_a]:text-[#ff6600] [&_a]:no-underline hover:[&_a]:underline
+              [&_code]:text-[#ff9933] [&_code]:bg-[#222] [&_code]:px-1 [&_code]:rounded
+              [&_pre]:bg-[#222] [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:my-2
+              [&_p]:my-1
+              ${hasTranslation ? 'text-[#666] text-xs mt-1' : 'text-[#c0c0c0]'}`}
             dangerouslySetInnerHTML={{ __html: comment.text }}
           />
         )}

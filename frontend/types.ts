@@ -111,6 +111,7 @@ export interface CommentTreeNode {
   id: number;
   author: string | null;
   text: string | null;
+  translatedText?: string | null;
   time: number;
   deleted: boolean;
   dead: boolean;
