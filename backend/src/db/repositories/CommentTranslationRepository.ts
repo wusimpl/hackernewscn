@@ -81,6 +81,16 @@ export class CommentTranslationRepository {
     return result.length > 0 && result[0].values.length > 0;
   }
 
+  // 获取评论翻译总数
+  async count(): Promise<number> {
+    const db = await getDatabase();
+    const result = db.exec('SELECT COUNT(*) as count FROM comment_translations');
+    if (result.length === 0 || result[0].values.length === 0) {
+      return 0;
+    }
+    return result[0].values[0][0] as number;
+  }
+
   // Helper method to map database row to CommentTranslationRecord
   private mapRowToTranslation(columns: string[], row: any[]): CommentTranslationRecord {
     const obj: any = {};

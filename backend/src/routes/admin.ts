@@ -4,6 +4,7 @@ import { getSchedulerService } from '../services/scheduler';
 import { config, reloadSchedulerConfig } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { updateEnvVar, deleteEnvVar, getEnvVar } from '../utils/envManager';
+import { StoryRepository, TitleTranslationRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository } from '../db/repositories';
 
 const router = Router();
 
@@ -71,6 +72,59 @@ router.get('/status', requireAdminAuth, async (req: Request, res: Response, next
     res.json({
       success: true,
       data: status,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/admin/stats
+ * 获取详细统计数据
+ */
+router.get('/stats', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const storyRepo = new StoryRepository();
+    const titleRepo = new TitleTranslationRepository();
+    const articleRepo = new ArticleTranslationRepository();
+    const commentRepo = new CommentRepository();
+    const commentTranslationRepo = new CommentTranslationRepository();
+
+    const [
+      storiesTotal,
+      titlesTranslated,
+      articleStatusCounts,
+      commentsTotal,
+      commentsTranslated,
+    ] = await Promise.all([
+      storyRepo.count(),
+      titleRepo.count(),
+      articleRepo.countByStatus(),
+      commentRepo.count(),
+      commentTranslationRepo.count(),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        stories: {
+          total: storiesTotal,
+        },
+        titles: {
+          translated: titlesTranslated,
+        },
+        articles: {
+          done: articleStatusCounts.done,
+          blocked: articleStatusCounts.blocked,
+          error: articleStatusCounts.error,
+          running: articleStatusCounts.running,
+          queued: articleStatusCounts.queued,
+        },
+        comments: {
+          total: commentsTotal,
+          translated: commentsTranslated,
+        },
+      },
     });
   } catch (error) {
     next(error);

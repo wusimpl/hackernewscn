@@ -118,6 +118,32 @@ export class ArticleTranslationRepository {
     return result.length > 0 && result[0].values.length > 0;
   }
 
+  // 按状态统计文章翻译数量
+  async countByStatus(): Promise<Record<string, number>> {
+    const db = await getDatabase();
+    const result = db.exec(
+      `SELECT status, COUNT(*) as count FROM article_translations GROUP BY status`
+    );
+
+    const counts: Record<string, number> = {
+      queued: 0,
+      running: 0,
+      done: 0,
+      error: 0,
+      blocked: 0,
+    };
+
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        const status = row[0] as string;
+        const count = row[1] as number;
+        counts[status] = count;
+      }
+    }
+
+    return counts;
+  }
+
   // 辅助方法:将数据库行映射为ArticleTranslation对象
   private mapRowToArticle(columns: string[], row: any[]): ArticleTranslation {
     const obj: any = {};

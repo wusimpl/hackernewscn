@@ -138,6 +138,16 @@ export class StoryRepository {
     saveDatabase();
   }
 
+  // 获取故事总数
+  async count(): Promise<number> {
+    const db = await getDatabase();
+    const result = db.exec('SELECT COUNT(*) as count FROM stories');
+    if (result.length === 0 || result[0].values.length === 0) {
+      return 0;
+    }
+    return result[0].values[0][0] as number;
+  }
+
   // 辅助方法:将数据库行映射为Story对象
   private mapRowToStory(columns: string[], row: any[]): StoryRecord {
     const obj: any = {};
