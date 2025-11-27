@@ -44,6 +44,7 @@ export interface Story {
   articleStatus?: ArticleStatus;
   isArticleTranslating?: boolean;
   isNew?: boolean;
+  isRead?: boolean; // 用户是否在应用内阅读过此文章
   hnRank?: number; // 在 HN Top Stories 中的排名位置 (0-based)
 }
 

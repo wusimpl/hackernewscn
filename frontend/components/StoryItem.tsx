@@ -76,17 +76,16 @@ export const StoryItem: React.FC<StoryItemProps> = ({ story, index, onRead }) =>
         <div className="flex flex-col">
           {/* Main Title */}
           <div className="flex items-baseline flex-wrap gap-x-2">
-            <a
-              href={story.url || `https://news.ycombinator.com/item?id=${story.id}`}
+            <span
               onClick={handleClick}
               className={`
-                text-[#dcdcdc] font-medium text-[15px] sm:text-[16px] leading-snug 
-                hover:text-white visited:text-[#828282] cursor-pointer
-                ${story.hasTranslatedArticle ? 'text-[#e0e0e0]' : ''}
+                font-medium text-[15px] sm:text-[16px] leading-snug 
+                hover:text-white cursor-pointer
+                ${story.isRead ? 'text-[#828282]' : 'text-[#dcdcdc]'}
               `}
             >
               {story.translatedTitle || story.title}
-            </a>
+            </span>
             <span className="text-[#666] text-xs sm:text-sm truncate">
               {getDomain(story.url)}
             </span>

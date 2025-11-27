@@ -14,6 +14,29 @@ import { hasLegacyCache, clearLegacyCache, getMigrationFlag, setMigrationFlag } 
 // Constants
 const INITIAL_ITEMS = 20;
 const LOAD_MORE_ITEMS = 10;
+const READ_STORIES_KEY = 'hn_read_stories';
+
+// 已读状态持久化
+const getReadStories = (): Set<number> => {
+  try {
+    const stored = localStorage.getItem(READ_STORIES_KEY);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const saveReadStory = (storyId: number) => {
+  try {
+    const readStories = getReadStories();
+    readStories.add(storyId);
+    // 只保留最近 500 条记录
+    const arr = Array.from(readStories).slice(-500);
+    localStorage.setItem(READ_STORIES_KEY, JSON.stringify(arr));
+  } catch {
+    // ignore
+  }
+};
 
 const App: React.FC = () => {
   const [stories, setStories] = useState<Story[]>([]);
@@ -141,10 +164,11 @@ const App: React.FC = () => {
                     return updated ? { ...s, ...updated } : s;
                   });
                   
-                  // 添加新故事到列表开头，标记为 isNew
+                  // 添加新故事到列表开头，标记为 isNew，并应用已读状态
+                  const readSet = getReadStories();
                   const brandNewStories = newStories
                     .filter((ns: Story) => !existingIds.has(ns.id))
-                    .map((ns: Story) => ({ ...ns, isNew: true }));
+                    .map((ns: Story) => ({ ...ns, isNew: true, isRead: readSet.has(ns.id) }));
                   
                   console.log('[SSE] 新故事数量:', brandNewStories.length);
                   console.log('[SSE] 新故事 IDs:', brandNewStories.map(s => s.id));
@@ -326,7 +350,10 @@ const App: React.FC = () => {
       if (result.stories.length > 0) {
         // 过滤掉已存在的故事，避免重复
         const existingIds = new Set(stories.map(s => s.id));
-        const newStories = result.stories.filter(s => !existingIds.has(s.id));
+        const readStories = getReadStories();
+        const newStories = result.stories
+          .filter(s => !existingIds.has(s.id))
+          .map(s => ({ ...s, isRead: readStories.has(s.id) }));
         setStories(prev => [...prev, ...newStories]);
       }
 
@@ -345,8 +372,14 @@ const App: React.FC = () => {
 
   // Click Handler - 点击文章时获取已翻译的内容
   const handleArticleClick = async (story: Story) => {
-    // 移除 isNew 标记
-    if (story.isNew) {
+    // 标记为已读
+    if (!story.isRead) {
+      saveReadStory(story.id);
+      setStories(prev => prev.map(s => 
+        s.id === story.id ? { ...s, isRead: true, isNew: false } : s
+      ));
+    } else if (story.isNew) {
+      // 移除 isNew 标记
       setStories(prev => prev.map(s => 
         s.id === story.id ? { ...s, isNew: false } : s
       ));
@@ -452,7 +485,13 @@ const App: React.FC = () => {
       setLoadingState(LoadingState.LOADING_STORIES);
       try {
         const result = await fetchStories({ cursor: 0, limit: INITIAL_ITEMS });
-        setStories(result.stories);
+        // 应用已读状态
+        const readStories = getReadStories();
+        const storiesWithReadState = result.stories.map(s => ({
+          ...s,
+          isRead: readStories.has(s.id)
+        }));
+        setStories(storiesWithReadState);
         setLastUpdatedAt(result.lastUpdatedAt);
       } catch (error) {
         console.error("Failed to load stories", error);
