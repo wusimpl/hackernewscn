@@ -117,8 +117,6 @@ export const StoryItem: React.FC<StoryItemProps> = ({ story, index, onRead }) =>
             <span>作者 {story.by}</span>
             <span>{timeAgo(story.time)}</span>
             <span>|</span>
-            <span className="hover:underline cursor-pointer">隐藏</span>
-            <span>|</span>
             <a
               href={`https://news.ycombinator.com/item?id=${story.id}`}
               target="_blank"

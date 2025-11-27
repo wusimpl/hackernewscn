@@ -1,74 +1,107 @@
 # HackerNews CN
 
-一个使用 AI 技术将 Hacker News 内容翻译成中文的 Web 应用。
+一个使用 AI 技术将 Hacker News 内容翻译成中文的全栈 Web 应用。
 
-## 背景
 
-Hacker News 是全球最流行的科技新闻聚合平台,但内容以英文为主。本项目通过结合 Hacker News API 和大语言模型(LLM),实现了新闻标题和文章内容的自动翻译,让中文用户能够流畅阅读最新的科技资讯。
+## 技术栈
 
-## 主要功能
+### 后端
+- **运行时**: Node.js
+- **语言**: TypeScript
+- **框架**: Express
+- **数据库**: SQL.js (SQLite)
+- **特色**:
+  - 定时调度器自动抓取 HackerNews
+  - LLM 翻译服务 (OpenAI 兼容 API)
+  - 任务队列管理
+  - SSE 实时事件推送
 
-- **实时获取** - 从 Hacker News 官方 API 获取热门新闻列表
-- **智能翻译** - 使用 LLM 将标题和文章翻译成中文
-- **本地缓存** - 已翻译的内容保存在本地,支持离线阅读
-- **背景翻译** - 点击文章后自动在后台翻译,不阻塞界面
-- **自定义提示词** - 支持自定义 AI 翻译风格(自托管模式)
+### 前端
+- **框架**: React 19
+- **语言**: TypeScript
+- **构建工具**: Vite
+- **UI 组件**: 自定义 React 组件
+- **Markdown**: react-markdown
 
-## 技术
-- OpenAI 兼容 API - LLM 翻译服务（默认翻译提示词来自[宝玉](https://x.com/dotey)）
-- Hacker News API - 新闻数据源
-- Jina AI - 网页内容提取
+## 核心功能
+
+- 自动抓取 HackerNews 热门内容
+- LLM 智能翻译 (标题和正文)
+- 本地数据库缓存
+- 实时翻译进度推送
+- 离线阅读支持
+- 管理员设置面板
 
 ## 快速开始
 
-### 环境配置
+### 环境准备
 
-复制环境变量模板:
-
+1. 复制环境配置:
 ```bash
-cp .env.template .env
+cp backend/.env.example backend/.env
 ```
 
-编辑 `.env` 文件,配置 LLM 服务:
-
+2. 配置环境变量 (backend/.env):
 ```env
-LLM_API_KEY=your-api-key-here
-LLM_BASE_URL=https://your-service/v1
-LLM_MODEL=your-model-name
-VITE_SELF_HOSTED=true
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-3.5-turbo
+ADMIN_TOKEN=your-admin-token
+PORT=3000
 ```
 
 ### 安装依赖
 
+根目录安装:
 ```bash
 npm install
 ```
 
+分别安装前后端依赖:
+```bash
+npm run dev:backend
+npm run dev:frontend
+```
+
 ### 开发模式
 
+同时启动前后端:
 ```bash
-npm run dev
+npm run dev:all
+```
+
+分别启动:
+```bash
+npm run dev:backend  # 后端端口 3000
+npm run dev:frontend # 前端端口 5173
 ```
 
 ### 生产构建
 
 ```bash
 npm run build
+npm start  # 启动生产服务器
 ```
 
-## 部署模式
+## 数据库
 
-项目支持两种部署模式:
+项目使用 SQL.js (SQLite) 存储:
 
-- **自托管模式** (`VITE_SELF_HOSTED=true`) - 显示设置面板,用户可自定义 API 配置和翻译提示词
-- **云托管模式** (`VITE_SELF_HOSTED=false`) - 隐藏配置界面,适合公共服务部署
+- stories - 新闻数据
+- title_translations - 标题翻译缓存
+- article_translations - 文章翻译缓存
+- jobs - 翻译任务队列
+- settings - 系统设置
+- scheduler_status - 调度器状态
 
-## 性能优化
+## 架构特点
 
-- 批量翻译标题,减少 API 调用次数
-- 智能缓存,避免重复翻译
-- 分页加载,每页显示 30 条新闻
-- 背景翻译,不阻塞用户交互
+1. **前后端分离**: 独立开发和部署
+2. **数据库**: 轻量级 SQLite，无需额外数据库服务
+3. **实时通信**: Server-Sent Events 推送翻译进度
+4. **任务队列**: 后台异步翻译任务
+5. **缓存策略**: 多层缓存减少 API 调用
+6. **配置灵活**: 支持环境变量和设置面板
 
 ## 许可证
 
