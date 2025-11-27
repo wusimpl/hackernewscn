@@ -6,6 +6,7 @@ import settingsRouter from './settings';
 import eventsRouter from './events';
 import adminRouter from './admin';
 import commentsRouter from './comments';
+import chatRouter from './chat';
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use('/settings', settingsRouter);
 router.use('/events', eventsRouter);
 router.use('/admin', adminRouter);
 router.use('/comments', commentsRouter);
+router.use('/chat', chatRouter);
 
 export default router;

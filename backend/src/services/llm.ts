@@ -2,11 +2,11 @@ import fetch from 'node-fetch';
 import { config } from '../config';
 
 // 默认提示词(与前端保持一致)
-export const DEFAULT_PROMPT = `请将以下英文文本,重写成通俗流畅、引人入胜的简体中文。
+export const DEFAULT_PROMPT = `将英文文本重写成通俗流畅、引人入胜的简体中文。
 
 核心要求:
 
-- 读者与风格: 面向对AI感兴趣的普通读者。风格要像讲故事,清晰易懂,而不是写学术论文。
+- 读者与风格: 面向对AI和科技感兴趣的普通读者。风格要像讲故事,清晰易懂,而不是写学术论文。
 - 准确第一: 核心事实、数据和逻辑必须与原文完全一致。
 - 行文流畅: 优先使用地道的中文语序。将英文长句拆解为更自然的中文短句。
 - 术语标准: 专业术语使用行业公认的标准翻译(如 \`overfitting\` -> \`过拟合\`)。第一次出现时,在译文后用括号加注英文原文。
@@ -215,29 +215,63 @@ export const translateArticle = async (
   const startTime = Date.now();
   console.log(`  [LLM Service] 准备翻译文章, 内容长度: ${markdownContent.length}字符`);
 
+  // 精简版提示词
   const systemPrompt = `
     ${customPrompt}
 
     ---------------------------------------------------
-    TASK: Translate the following English Markdown content into Chinese Markdown.
+    TASK: Extract and translate the article from raw webpage content.
 
-    INSTRUCTIONS:
-    1. Output ONLY the translated Markdown content.
-    2. Do NOT wrap the output in markdown code blocks (e.g. \`\`\`markdown).
-    3. Preserve all links, bolding, headers, and image syntax exactly.
-    4. Translate the main title (first # Header) as well.
-    5. IMPORTANT: The input may contain website navigation menus, sidebars, footers, ads, or other non-article content scraped from the webpage. You MUST identify and SKIP these elements - only translate the actual article body content. Common noise patterns include:
-       - Navigation menus (lists of short links like "Home", "About", "Contact")
-       - Repeated site headers/footers
-       - Social media share buttons
-       - Advertisement text
-       - Cookie consent notices
-       - "Related articles" or "Popular posts" sections at the end
+    The input contains website noise (navigation, sidebars, ads, footers, etc.) mixed with the actual article.
+    
+    You MUST:
+    1. Identify the main article body (headline + coherent paragraphs).
+    2. DISCARD all non-article content - do NOT include any noise in your output.
+    3. Translate only the article into Chinese Markdown.
+    4. Preserve article formatting (headers, bold, links, images).
+    5. Do NOT wrap output in code blocks.
+  `;
+
+  // 详细版提示词
+  const systemPromptVerbose = `
+    ${customPrompt}
+  
+    ---------------------------------------------------
+    TASK: Translate the following English Markdown content into Chinese Markdown.
+  
+    STEP 1 - CONTENT EXTRACTION (Critical):
+    The input is raw scraped webpage content that contains BOTH the article AND website noise.
+    You MUST first mentally identify the following noise elements:
+    - Navigation menus (e.g., "Home | About | Contact | Login")
+    - Site headers/footers with repeated branding
+    - Sidebar content (categories, tags, archives, popular posts)
+    - Social sharing buttons ("Share on Twitter", "Follow us")
+    - Advertisement blocks and sponsored content
+    - Cookie/privacy notices
+    - "Related articles", "You might also like" sections
+    - Comment sections or "Leave a reply" forms
+    - Newsletter signup prompts
+  
+    ⚠️ DO NOT translate these noise elements.
+    ⚠️ DO NOT include them in your output AT ALL - not even in their original English form.
+  
+    Only extract and translate the MAIN ARTICLE BODY - typically identified by:
+    - A clear headline/title
+    - Coherent paragraphs forming a complete narrative
+    - Author byline and publication date (if present)
+  
+    STEP 2 - TRANSLATION OUTPUT:
+    1. Output ONLY the clean, translated Chinese Markdown of the article body.
+    2. Your output should contain ZERO website navigation, ads, or other noise.
+    3. Do NOT wrap output in markdown code blocks.
+    4. Preserve Markdown formatting (headers, bold, italic, images) within the article.
+    5. Preserve links that are PART OF the article content (inline references, citations).
+    6. Translate the article title as well.
   `;
 
   const apiStartTime = Date.now();
   const content = await callLLM([
-    { role: "system", content: systemPrompt },
+    { role: "system", content: systemPromptVerbose },
     { role: "user", content: markdownContent }
   ], false);
   const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(2);

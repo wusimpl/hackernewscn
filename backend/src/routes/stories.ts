@@ -261,6 +261,9 @@ async function triggerTranslationForStories(stories: StoryWithRank[], promptHash
 
       await saveStoryToDatabase(story);
 
+      // 获取并存储评论
+      await fetchAndStoreCommentsForStory(story, customPrompt);
+
       queueService.emitSSEEvent({
         type: 'article.done',
         storyId: story.id,
@@ -331,6 +334,82 @@ async function triggerTranslationForStories(stories: StoryWithRank[], promptHash
     }
 
     console.log(`[Stories API] === 第 ${batchNum}/${totalBatches} 批完成 ===`);
+  }
+}
+
+/**
+ * 获取并存储故事的评论
+ * 复用 scheduler 中的逻辑
+ */
+async function fetchAndStoreCommentsForStory(story: Story, customPrompt: string): Promise<void> {
+  try {
+    // 检查故事是否有评论
+    if (!story.descendants || story.descendants === 0) {
+      return;
+    }
+
+    const { CommentRepository, CommentTranslationRepository } = await import('../db/repositories');
+    const commentRepo = new CommentRepository();
+    const commentTranslationRepo = new CommentTranslationRepository();
+
+    // 检查是否已有评论
+    const hasExistingComments = await commentRepo.hasComments(story.id);
+    if (hasExistingComments) {
+      return;
+    }
+
+    // 获取故事的 kids（顶级评论 ID）
+    const { fetchStoryDetails, fetchStoryComments } = await import('../services/hn');
+    const storyDetails = await fetchStoryDetails(story.id);
+    
+    if (!storyDetails) {
+      return;
+    }
+
+    const kids = (storyDetails as any).kids as number[] | undefined;
+    if (!kids || kids.length === 0) {
+      return;
+    }
+
+    console.log(`[Stories API] 获取 ${kids.length} 条顶级评论: story ${story.id}`);
+    
+    // 获取所有评论
+    const comments = await fetchStoryComments(story.id, kids);
+    
+    if (comments.length > 0) {
+      // 翻译前50条评论
+      const { translateCommentsBatch } = await import('../services/llm');
+      const MAX_COMMENTS = 50;
+      const commentsToTranslate = comments
+        .filter(c => c.text && c.text.trim().length > 0 && !c.deleted && !c.dead)
+        .slice(0, MAX_COMMENTS);
+
+      let translations: { comment_id: number; text_en: string; text_zh: string }[] = [];
+      
+      if (commentsToTranslate.length > 0) {
+        const items = commentsToTranslate.map(c => ({ id: c.comment_id, text: c.text! }));
+        const results = await translateCommentsBatch(items, customPrompt);
+        
+        translations = commentsToTranslate
+          .filter(c => results.some(r => r.id === c.comment_id))
+          .map(c => ({
+            comment_id: c.comment_id,
+            text_en: c.text!,
+            text_zh: results.find(r => r.id === c.comment_id)!.translatedText,
+          }));
+      }
+
+      // 存储评论和翻译
+      await commentRepo.upsertMany(comments);
+      console.log(`[Stories API] 存储了 ${comments.length} 条评论: story ${story.id}`);
+      
+      if (translations.length > 0) {
+        await commentTranslationRepo.upsertMany(translations);
+        console.log(`[Stories API] 存储了 ${translations.length} 条评论翻译: story ${story.id}`);
+      }
+    }
+  } catch (error) {
+    console.error(`[Stories API] 获取评论失败 story ${story.id}:`, error);
   }
 }
 

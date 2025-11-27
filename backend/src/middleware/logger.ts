@@ -44,17 +44,27 @@ function writeToFile(filePath: string, message: string) {
 }
 
 /**
- * 过滤敏感信息 (如 API Key, Token 等)
+ * 过滤敏感信息 (如 API Key, Token 等) 和大文本字段
  */
 function sanitizeData(data: any): any {
   if (!data || typeof data !== 'object') return data;
 
   const sensitiveKeys = ['apiKey', 'api_key', 'token', 'password', 'authorization'];
+  // 需要截断的大文本字段
+  const truncateKeys = ['articleContent', 'content'];
+  const MAX_CONTENT_LENGTH = 50;
+  
   const sanitized = { ...data };
 
   for (const key of Object.keys(sanitized)) {
     if (sensitiveKeys.some(sk => key.toLowerCase().includes(sk))) {
       sanitized[key] = '***REDACTED***';
+    } else if (truncateKeys.includes(key) && typeof sanitized[key] === 'string') {
+      // 截断大文本字段，只显示前50个字符
+      const value = sanitized[key] as string;
+      if (value.length > MAX_CONTENT_LENGTH) {
+        sanitized[key] = `${value.slice(0, MAX_CONTENT_LENGTH)}... [${value.length} chars]`;
+      }
     } else if (typeof sanitized[key] === 'object') {
       sanitized[key] = sanitizeData(sanitized[key]);
     }
