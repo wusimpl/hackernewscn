@@ -92,10 +92,16 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 
     // 构建返回结果 - 只返回标题和文章都翻译完成的故事
     const storiesWithTranslation: StoryWithTranslation[] = [];
+    let blockedCount = 0;
     for (const story of stories) {
       // 获取已有的翻译
       const translatedTitle = translationMap.get(story.id);
       const articleCache = await getArticleTranslation(story.id);
+      
+      // 统计被屏蔽的文章数量
+      if (articleCache?.status === 'blocked') {
+        blockedCount++;
+      }
       
       // 只返回标题和文章内容都翻译完成的故事
       const hasTranslatedTitle = !!translatedTitle;
@@ -127,8 +133,9 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       });
     }
 
-    // 计算未翻译的文章数量
-    const untranslatedCount = stories.length - storiesWithTranslation.length;
+    // 计算未翻译的文章数量（排除已被屏蔽的文章）
+    const untranslatedCount = stories.length - storiesWithTranslation.length - blockedCount;
+    console.log(`[Stories API] 统计: 总数=${stories.length}, 已翻译=${storiesWithTranslation.length}, blocked=${blockedCount}, 未翻译=${untranslatedCount}`);
 
     // 如果是 Load More 请求且有未翻译的文章，触发后台翻译
     if (cursor > 0 && untranslatedCount > 0) {
@@ -265,12 +272,27 @@ async function triggerTranslationForStories(stories: StoryWithRank[], promptHash
       // 获取并存储评论
       await fetchAndStoreCommentsForStory(story, customPrompt);
 
+      // 发送SSE事件，包含完整的story信息以便前端合并到列表
       queueService.emitSSEEvent({
         type: 'article.done',
         storyId: story.id,
         title: titleSnapshot,
         content: translatedMarkdown,
-        originalUrl: story.url
+        originalUrl: story.url,
+        story: {
+          id: story.id,
+          title: story.title,
+          by: story.by,
+          score: story.score,
+          time: story.time,
+          url: story.url,
+          descendants: story.descendants,
+          translatedTitle: titleSnapshot,
+          isTranslating: false,
+          hasTranslatedArticle: true,
+          articleStatus: 'done' as const,
+          hnRank: (story as StoryWithRank).hnRank,
+        }
       });
 
       console.log(`[Stories API] 文章 ${story.id} 翻译完成`);

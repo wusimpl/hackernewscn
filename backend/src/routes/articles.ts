@@ -207,13 +207,26 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
         const totalDuration = ((Date.now() - startTime) / 1000).toFixed(2);
         console.log(`[文章翻译任务] 完成: storyId=${storyId}, 总耗时: ${totalDuration}秒`);
 
-        // Emit SSE event for completion
+        // Emit SSE event for completion with full story info
         queueService.emitSSEEvent({
           type: 'article.done',
           storyId,
           title: titleSnapshot,
           content: translatedMarkdown,
-          originalUrl: story.url
+          originalUrl: story.url,
+          story: {
+            id: storyId,
+            title: story.title_en,
+            by: story.by,
+            score: story.score,
+            time: story.time,
+            url: story.url,
+            descendants: story.descendants,
+            translatedTitle: titleSnapshot,
+            isTranslating: false,
+            hasTranslatedArticle: true,
+            articleStatus: 'done' as const,
+          }
         });
 
       } catch (error) {
