@@ -247,3 +247,102 @@ export const translateArticle = async (
 
   return content || "Translation generation failed.";
 };
+
+interface CommentTranslationResult {
+  id: number;
+  translatedText: string;
+}
+
+/**
+ * 批量翻译评论
+ * @param items 要翻译的评论数组 { id, text }
+ * @param customPrompt 自定义提示词(可选)
+ * @returns 翻译结果数组 { id, translatedText }
+ */
+export const translateCommentsBatch = async (
+  items: { id: number; text: string }[],
+  customPrompt: string = DEFAULT_PROMPT
+): Promise<CommentTranslationResult[]> => {
+  if (items.length === 0) return [];
+
+  const startTime = Date.now();
+  console.log(`[LLM Service] 开始批量翻译 ${items.length} 条评论`);
+
+  const systemPrompt = `
+    ${customPrompt}
+
+    ---------------------------------------------------
+    TASK: Translate the HackerNews comments provided by the user.
+
+    CRITICAL OUTPUT INSTRUCTIONS:
+    1. You MUST return valid JSON only.
+    2. The root object MUST have a property "translations" which is an array.
+    3. Each item in the array must contain:
+       - "id": The original number ID.
+       - "translatedText": The Chinese translation of the comment.
+    4. Comments may contain HTML tags (like <p>, <a>, <code>, <pre>, <i>). Preserve these HTML tags exactly as they are, only translate the text content within them.
+    5. Preserve any code snippets, URLs, and technical terms.
+
+    Example JSON structure:
+    {
+      "translations": [
+        { "id": 123, "translatedText": "<p>这是翻译后的评论...</p>" }
+      ]
+    }
+  `;
+
+  const userPrompt = JSON.stringify(items);
+
+  const apiStartTime = Date.now();
+  const content = await callLLM([
+    { role: "system", content: systemPrompt },
+    { role: "user", content: userPrompt }
+  ], true);
+  const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(2);
+  console.log(`  [LLM Service] 评论翻译API调用耗时: ${apiDuration}秒`);
+
+  if (!content) {
+    console.log(`[LLM Service] 评论翻译API返回空内容`);
+    return [];
+  }
+
+  try {
+    // 清理可能存在的 markdown 代码块标记
+    let cleanedContent = content.trim();
+
+    if (cleanedContent.startsWith('```json')) {
+      cleanedContent = cleanedContent.slice(7);
+    } else if (cleanedContent.startsWith('```')) {
+      cleanedContent = cleanedContent.slice(3);
+    }
+
+    if (cleanedContent.endsWith('```')) {
+      cleanedContent = cleanedContent.slice(0, -3);
+    }
+
+    cleanedContent = cleanedContent.trim();
+
+    const parsed = JSON.parse(cleanedContent) as any;
+
+    // 支持两种格式: { translations: [...] } 或直接 [...]
+    let result: CommentTranslationResult[] = [];
+    if (parsed.translations && Array.isArray(parsed.translations)) {
+      result = parsed.translations;
+    } else if (Array.isArray(parsed)) {
+      result = parsed;
+    } else {
+      console.warn('[LLM Service] 评论翻译返回格式异常:', parsed);
+    }
+
+    const totalDuration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`[LLM Service] 完成 ${result.length}/${items.length} 条评论翻译, 总耗时: ${totalDuration}秒`);
+
+    return result;
+
+  } catch (error) {
+    const errorDuration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.error(`[LLM Service] 评论翻译解析失败, 耗时: ${errorDuration}秒, 错误:`, error);
+    console.error('[LLM Service] Original content:', content);
+    return [];
+  }
+};

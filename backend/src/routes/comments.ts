@@ -1,5 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { CommentRepository } from '../db/repositories';
+import { CommentRepository, CommentTranslationRepository } from '../db/repositories';
 import { ApiResponse, CommentRecord, CommentTreeNode } from '../types';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 
@@ -20,9 +20,14 @@ interface CommentsResponse {
  * 
  * @param comments - Flat list of comment records from database
  * @param storyId - The story ID (used as root parent)
+ * @param translationMap - Map of comment_id to translated text
  * @returns Array of root-level comment tree nodes
  */
-export function buildCommentTree(comments: CommentRecord[], storyId: number): CommentTreeNode[] {
+export function buildCommentTree(
+  comments: CommentRecord[],
+  storyId: number,
+  translationMap: Map<number, string> = new Map()
+): CommentTreeNode[] {
   // Create a map of comment_id to CommentTreeNode
   const nodeMap = new Map<number, CommentTreeNode>();
   
@@ -32,6 +37,7 @@ export function buildCommentTree(comments: CommentRecord[], storyId: number): Co
       id: comment.comment_id,
       author: comment.author,
       text: comment.text,
+      translatedText: translationMap.get(comment.comment_id) || null,
       time: comment.time,
       deleted: comment.deleted === 1,
       dead: comment.dead === 1,
@@ -90,10 +96,16 @@ router.get('/:storyId', async (req: Request, res: Response, next: NextFunction) 
     }
 
     const commentRepo = new CommentRepository();
+    const commentTranslationRepo = new CommentTranslationRepository();
+    
     const comments = await commentRepo.findByStoryId(storyId);
 
-    // Build tree structure from flat list
-    const commentTree = buildCommentTree(comments, storyId);
+    // Get translations for this story's comments
+    const translations = await commentTranslationRepo.findByStoryId(storyId);
+    const translationMap = new Map(translations.map(t => [t.comment_id, t.text_zh]));
+
+    // Build tree structure from flat list with translations
+    const commentTree = buildCommentTree(comments, storyId, translationMap);
 
     // Requirements: 4.3 - Return empty array when story has no comments
     const response: CommentsResponse = {

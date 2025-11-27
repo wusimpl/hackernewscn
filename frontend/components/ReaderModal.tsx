@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { CommentsPanel } from './CommentsPanel';
 
 interface ReaderModalProps {
@@ -150,8 +151,11 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                   prose-p:leading-relaxed prose-p:text-[#c0c0c0]
                   prose-blockquote:border-l-[#ff6600] prose-blockquote:text-[#999]
                   prose-code:text-[#ff9933] prose-code:bg-[#222] prose-code:px-1 prose-code:rounded prose-code:before:content-none prose-code:after:content-none
-                  prose-pre:bg-[#222] prose-pre:border prose-pre:border-[#333]">
-                  <ReactMarkdown>{content}</ReactMarkdown>
+                  prose-pre:bg-[#222] prose-pre:border prose-pre:border-[#333]
+                  prose-table:border-collapse prose-table:w-full prose-table:text-sm
+                  prose-th:border prose-th:border-[#444] prose-th:bg-[#222] prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:text-[#dcdcdc]
+                  prose-td:border prose-td:border-[#333] prose-td:px-3 prose-td:py-2 prose-td:text-[#c0c0c0]">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                 </article>
                 
                 <div className="mt-12 pt-8 border-t border-[#333] text-center">

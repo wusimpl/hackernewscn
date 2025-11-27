@@ -110,5 +110,14 @@ CREATE INDEX IF NOT EXISTS idx_comments_story_id ON comments(story_id);
 -- 索引：按父评论查询子评论
 CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_id);
 
+-- 评论翻译缓存表
+CREATE TABLE IF NOT EXISTS comment_translations (
+  comment_id INTEGER PRIMARY KEY,
+  text_en TEXT NOT NULL,
+  text_zh TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY (comment_id) REFERENCES comments(comment_id) ON DELETE CASCADE
+);
+
 -- 插入初始版本号
 INSERT OR IGNORE INTO db_version (version, applied_at) VALUES (1, strftime('%s', 'now'));

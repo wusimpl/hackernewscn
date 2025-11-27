@@ -1,10 +1,10 @@
 import fetch from 'node-fetch';
 import { config } from '../config';
 import { refreshTopStories, saveStoryToDatabase, fetchStoryComments } from './hn';
-import { translateTitlesBatch, translateArticle, DEFAULT_PROMPT } from './llm';
+import { translateTitlesBatch, translateArticle, translateCommentsBatch, DEFAULT_PROMPT } from './llm';
 import { getQueueService } from './queue';
 import { hashPrompt, setArticleTranslation, getArticleTranslation } from './cache';
-import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository } from '../db/repositories';
+import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository } from '../db/repositories';
 import { Story, StoryWithTranslation, SSEStoriesUpdatedEvent } from '../types';
 
 /**
@@ -50,12 +50,14 @@ export class SchedulerService {
   private settingsRepo: SettingsRepository;
   private articleTranslationRepo: ArticleTranslationRepository;
   private commentRepo: CommentRepository;
+  private commentTranslationRepo: CommentTranslationRepository;
 
   constructor() {
     this.titleTranslationRepo = new TitleTranslationRepository();
     this.settingsRepo = new SettingsRepository();
     this.articleTranslationRepo = new ArticleTranslationRepository();
     this.commentRepo = new CommentRepository();
+    this.commentTranslationRepo = new CommentTranslationRepository();
   }
 
   /**
@@ -566,7 +568,8 @@ export class SchedulerService {
       console.log(`[Scheduler] Story ${story.id} saved after article translation completed`);
 
       // Fetch and store comments for the story (Requirements: 1.1, 1.2)
-      await this.fetchAndStoreComments(story);
+      // Also translate top 50 comments
+      await this.fetchAndStoreComments(story, customPrompt);
 
       // Emit SSE event for article completion with full story info
       const queueService = getQueueService();
@@ -604,8 +607,10 @@ export class SchedulerService {
    * Fetch and store comments for a story
    * Requirements: 1.1 - Fetch all comments when scheduler fetches a story
    * Requirements: 1.2 - Store complete comment tree structure in database
+   * 
+   * 重要：评论必须在翻译完成后才能入库，与文章翻译逻辑保持一致
    */
-  private async fetchAndStoreComments(story: Story): Promise<void> {
+  private async fetchAndStoreComments(story: Story, customPrompt: string): Promise<void> {
     try {
       // Check if story has comments (descendants > 0)
       if (!story.descendants || story.descendants === 0) {
@@ -641,14 +646,141 @@ export class SchedulerService {
       const comments = await fetchStoryComments(story.id, kids);
       
       if (comments.length > 0) {
-        // Store comments in database
+        // 先翻译前50条评论（包括嵌套评论），翻译完成后再一起入库
+        const translations = await this.translateComments(story.id, comments, customPrompt);
+        
+        // 评论翻译完成后，才将评论和翻译一起入库
         await this.commentRepo.upsertMany(comments);
         console.log(`[Scheduler] Stored ${comments.length} comments for story ${story.id}`);
+        
+        if (translations.length > 0) {
+          await this.commentTranslationRepo.upsertMany(translations);
+          console.log(`[Scheduler] Stored ${translations.length} comment translations for story ${story.id}`);
+        }
       }
     } catch (error) {
       // Log error but don't fail the article translation (Requirements: 1.4)
       console.error(`[Scheduler] Failed to fetch comments for story ${story.id}:`, error);
     }
+  }
+
+  /**
+   * Translate comments for a story (max 50 comments including nested)
+   * Only translates comments that have text content
+   * 
+   * 翻译范围：前50条评论（包括嵌套评论，按树结构遍历顺序）
+   * 翻译方式：一次性发送50条评论翻译，不分批次
+   * 
+   * @returns 翻译结果数组，用于后续入库
+   */
+  private async translateComments(
+    storyId: number,
+    comments: Omit<import('../types').CommentRecord, 'fetched_at'>[],
+    customPrompt: string
+  ): Promise<{ comment_id: number; text_en: string; text_zh: string }[]> {
+    // 按树结构顺序获取前50条有文本内容的评论（包括嵌套评论）
+    const MAX_COMMENTS_TO_TRANSLATE = 50;
+    const commentsWithText = this.getFirst50CommentsInTreeOrder(comments, storyId, MAX_COMMENTS_TO_TRANSLATE);
+
+    if (commentsWithText.length === 0) {
+      console.log(`[Scheduler] Story ${storyId} has no comments to translate`);
+      return [];
+    }
+
+    console.log(`[Scheduler] Translating ${commentsWithText.length} comments for story ${storyId} (一次性发送)`);
+
+    // Prepare items for batch translation - 一次性发送所有50条
+    const items = commentsWithText.map(c => ({
+      id: c.comment_id,
+      text: c.text!,
+    }));
+
+    // 一次性翻译所有评论，不分批次
+    const results = await translateCommentsBatch(items, customPrompt);
+
+    if (results.length === 0) {
+      console.log(`[Scheduler] No comment translations returned for story ${storyId}`);
+      return [];
+    }
+
+    // Create a map of id -> translatedText
+    const resultMap = new Map(results.map(r => [r.id, r.translatedText]));
+
+    // 返回翻译结果，不在这里入库
+    const translations = commentsWithText
+      .filter(c => resultMap.has(c.comment_id))
+      .map(c => ({
+        comment_id: c.comment_id,
+        text_en: c.text!,
+        text_zh: resultMap.get(c.comment_id)!,
+      }));
+
+    console.log(`[Scheduler] Got ${translations.length} comment translations for story ${storyId}`);
+    return translations;
+  }
+
+  /**
+   * 按树结构遍历顺序获取前N条有文本内容的评论
+   * 遍历顺序：深度优先，按时间排序
+   * 
+   * @param comments 扁平化的评论数组
+   * @param storyId 故事ID（用于识别顶级评论）
+   * @param limit 最大数量
+   * @returns 前N条有文本内容的评论
+   */
+  private getFirst50CommentsInTreeOrder(
+    comments: Omit<import('../types').CommentRecord, 'fetched_at'>[],
+    storyId: number,
+    limit: number
+  ): Omit<import('../types').CommentRecord, 'fetched_at'>[] {
+    // 构建评论映射和父子关系
+    const commentMap = new Map(comments.map(c => [c.comment_id, c]));
+    const childrenMap = new Map<number, number[]>();
+    
+    // 初始化 childrenMap
+    childrenMap.set(storyId, []); // 顶级评论的父ID是storyId
+    for (const comment of comments) {
+      if (!childrenMap.has(comment.parent_id)) {
+        childrenMap.set(comment.parent_id, []);
+      }
+      childrenMap.get(comment.parent_id)!.push(comment.comment_id);
+    }
+    
+    // 对每个父节点的子评论按时间排序
+    for (const [, children] of childrenMap) {
+      children.sort((a, b) => {
+        const commentA = commentMap.get(a);
+        const commentB = commentMap.get(b);
+        return (commentA?.time || 0) - (commentB?.time || 0);
+      });
+    }
+    
+    // 深度优先遍历，收集前N条有文本内容的评论
+    const result: Omit<import('../types').CommentRecord, 'fetched_at'>[] = [];
+    
+    const traverse = (parentId: number) => {
+      if (result.length >= limit) return;
+      
+      const children = childrenMap.get(parentId) || [];
+      for (const childId of children) {
+        if (result.length >= limit) return;
+        
+        const comment = commentMap.get(childId);
+        if (comment) {
+          // 只收集有文本内容且未删除的评论
+          if (comment.text && comment.text.trim().length > 0 && !comment.deleted && !comment.dead) {
+            result.push(comment);
+          }
+          // 继续遍历子评论
+          traverse(childId);
+        }
+      }
+    };
+    
+    // 从顶级评论开始遍历
+    traverse(storyId);
+    
+    return result;
   }
 }
 
