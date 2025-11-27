@@ -25,6 +25,14 @@
       .custom-scrollbar::-webkit-scrollbar-thumb:hover {
         background: #ff6600;
       }
+      /* Hide scrollbar but keep scrolling */
+      .scrollbar-hide {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      .scrollbar-hide::-webkit-scrollbar {
+        display: none;
+      }
     </style>
   <script type="importmap">
 {

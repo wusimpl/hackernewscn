@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getPrompt, updatePrompt } from '../services/settingsService';
-import { getArticleCache, clearAllCache } from '../services/cacheService';
+import { getArticleCache, clearAllCache, deleteArticle } from '../services/cacheService';
 import { DEFAULT_PROMPT } from '../services/llmService';
 import { CachedArticle } from '../types';
 
@@ -443,7 +443,7 @@ export const AdminPanel: React.FC = () => {
           <textarea
             value={customPrompt}
             onChange={(e) => setCustomPrompt(e.target.value)}
-            className="w-full h-48 bg-[#242424] text-[#dcdcdc] border border-[#444] p-2 font-mono text-sm focus:outline-none focus:border-[#ff6600] mb-3"
+            className="w-full h-48 bg-[#242424] text-[#dcdcdc] border border-[#444] p-2 font-mono text-sm focus:outline-none focus:border-[#ff6600] mb-3 scrollbar-hide"
             spellCheck={false}
           />
           <div className="flex justify-between items-center">
@@ -489,16 +489,36 @@ export const AdminPanel: React.FC = () => {
           ) : articleCache.length === 0 ? (
             <p className="text-[#828282] text-center py-4">暂无已翻译文章</p>
           ) : (
-            <div className="max-h-64 overflow-y-auto">
+            <div className="max-h-64 overflow-y-auto scrollbar-hide">
               <ul className="divide-y divide-[#333]">
                 {[...articleCache].sort((a, b) => b.timestamp - a.timestamp).map(article => (
                   <li key={article.id} className="py-2">
-                    <div className="text-[#dcdcdc] text-sm mb-1 line-clamp-1">
-                      {article.title}
-                    </div>
-                    <div className="flex justify-between items-center text-xs text-[#666]">
-                      <span className="truncate max-w-[70%]">{article.originalUrl}</span>
-                      <span>{new Date(article.timestamp).toLocaleDateString()}</span>
+                    <div className="flex justify-between items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[#dcdcdc] text-sm mb-1 line-clamp-1">
+                          {article.title}
+                        </div>
+                        <div className="flex justify-between items-center text-xs text-[#666]">
+                          <span className="truncate max-w-[70%]">{article.originalUrl}</span>
+                          <span>{new Date(article.timestamp).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`确定删除「${article.title}」的翻译缓存？`)) return;
+                          try {
+                            await deleteArticle(article.id);
+                            setArticleCache(prev => prev.filter(a => a.id !== article.id));
+                            setMessage('文章缓存已删除');
+                          } catch {
+                            setError('删除失败');
+                          }
+                        }}
+                        className="text-red-900 hover:text-red-500 text-xs shrink-0 px-2 py-1"
+                        title="删除此文章缓存"
+                      >
+                        删除
+                      </button>
                     </div>
                   </li>
                 ))}

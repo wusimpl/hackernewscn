@@ -166,7 +166,11 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
         const jinaUrl = `https://r.jina.ai/${story.url}`;
         console.log(`  [步骤1] 获取文章内容...`);
 
-        const response = await fetch(jinaUrl);
+        const response = await fetch(jinaUrl, {
+          headers: {
+            'X-With-Images-Summary': 'true'  // 请求返回图片URL列表
+          }
+        });
 
         // Handle 451 error (legal restriction)
         if (!response.ok) {

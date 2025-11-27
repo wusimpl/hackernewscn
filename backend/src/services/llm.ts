@@ -260,11 +260,20 @@ export const translateArticle = async (
     - Coherent paragraphs forming a complete narrative
     - Author byline and publication date (if present)
   
-    STEP 2 - TRANSLATION OUTPUT:
-    1. Output ONLY the clean, translated Chinese Markdown of the article body.
+    STEP 2 - IMAGE HANDLING (Critical):
+    The input may contain an "Images:" section at the end with a list of images in markdown format.
+    You MUST:
+    1. Identify which images are RELEVANT to the article content (photos, illustrations, diagrams).
+    2. DISCARD tracking pixels, ads, icons, and other non-content images (usually small images, analytics URLs, or images with no meaningful alt text).
+    3. INSERT the relevant images at APPROPRIATE positions in the translated article where they contextually belong.
+    4. Translate the image alt text to Chinese while keeping the image URL unchanged.
+    5. If an image clearly belongs after a specific paragraph (based on context or original "Photo:" captions), place it there.
+  
+    STEP 3 - TRANSLATION OUTPUT:
+    1. Output ONLY the clean, translated Chinese Markdown of the article body WITH images embedded.
     2. Your output should contain ZERO website navigation, ads, or other noise.
     3. Do NOT wrap output in markdown code blocks.
-    4. Preserve Markdown formatting (headers, bold, italic, images) within the article.
+    4. Preserve Markdown formatting (headers, bold, italic) within the article.
     5. Preserve links that are PART OF the article content (inline references, citations).
     6. Translate the article title as well.
   `;
