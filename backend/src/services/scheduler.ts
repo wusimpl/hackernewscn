@@ -38,6 +38,7 @@ export class SchedulerService {
   private intervalId: NodeJS.Timeout | null = null;
   private isRunning: boolean = false;
   private lastRunAt: number | null = null;
+  private nextRunAt: number | null = null;
   private storiesFetched: number = 0;
   private titlesTranslated: number = 0;
 
@@ -72,11 +73,16 @@ export class SchedulerService {
       console.error('[Scheduler] Initial run failed:', err);
     });
 
+    // 计算下次执行时间（固定时间点）
+    this.nextRunAt = Date.now() + schedulerConfig.interval;
+
     // Set up periodic execution
     this.intervalId = setInterval(() => {
       this.runOnce().catch(err => {
         console.error('[Scheduler] Scheduled run failed:', err);
       });
+      // 每次执行后更新下次执行时间
+      this.nextRunAt = Date.now() + schedulerConfig.interval;
     }, schedulerConfig.interval);
 
     this.isRunning = true;
@@ -91,6 +97,7 @@ export class SchedulerService {
       clearInterval(this.intervalId);
       this.intervalId = null;
       this.isRunning = false;
+      this.nextRunAt = null;
       console.log('[Scheduler] Stopped');
     }
   }
@@ -216,7 +223,7 @@ export class SchedulerService {
     return {
       isRunning: this.isRunning,
       lastRunAt: this.lastRunAt,
-      nextRunAt: this.intervalId ? Date.now() + config.scheduler.interval : null,
+      nextRunAt: this.nextRunAt,
       storiesFetched: this.storiesFetched,
       titlesTranslated: titlesCount,
     };
@@ -232,7 +239,7 @@ export class SchedulerService {
     return {
       isRunning: this.isRunning,
       lastRunAt: this.lastRunAt,
-      nextRunAt: this.intervalId ? Date.now() + schedulerConfig.interval : null,
+      nextRunAt: this.nextRunAt,
       storiesFetched: this.storiesFetched,
       titlesTranslated: titlesCount,
       currentInterval: schedulerConfig.interval,
