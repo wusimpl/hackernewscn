@@ -4,6 +4,50 @@ import remarkGfm from 'remark-gfm';
 import { CommentsPanel } from './CommentsPanel';
 import { ArticleChat } from './ArticleChat';
 
+// 图片预览组件
+const ImageViewer: React.FC<{
+  src: string;
+  alt?: string;
+  onClose: () => void;
+}> = ({ src, alt, onClose }) => {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div 
+      className="fixed inset-0 z-[200] flex items-center justify-center bg-black/90 backdrop-blur-sm cursor-zoom-out"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <img
+        src={src}
+        alt={alt || ''}
+        className="max-w-[90vw] max-h-[90vh] object-contain cursor-zoom-out"
+      />
+      {alt && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm bg-black/50 px-4 py-2 rounded">
+          {alt}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface ReaderModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -31,6 +75,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   const [showComments, setShowComments] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [viewingImage, setViewingImage] = useState<{ src: string; alt?: string } | null>(null);
 
   // 检测是否为移动端
   useEffect(() => {
@@ -201,8 +246,26 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                   prose-pre:bg-[#222] prose-pre:border prose-pre:border-[#333]
                   prose-table:border-collapse prose-table:w-full prose-table:text-sm
                   prose-th:border prose-th:border-[#444] prose-th:bg-[#222] prose-th:px-3 prose-th:py-2 prose-th:text-left prose-th:text-[#dcdcdc]
-                  prose-td:border prose-td:border-[#333] prose-td:px-3 prose-td:py-2 prose-td:text-[#c0c0c0]">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                  prose-td:border prose-td:border-[#333] prose-td:px-3 prose-td:py-2 prose-td:text-[#c0c0c0]
+                  prose-img:cursor-zoom-in prose-img:transition-opacity hover:prose-img:opacity-80">
+                  <ReactMarkdown 
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      img: ({ src, alt }) => (
+                        <img
+                          src={src}
+                          alt={alt || ''}
+                          className="cursor-zoom-in transition-opacity hover:opacity-80"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            if (src) setViewingImage({ src, alt });
+                          }}
+                        />
+                      )
+                    }}
+                  >
+                    {content}
+                  </ReactMarkdown>
                 </article>
                 
                 <div className="mt-12 pt-8 border-t border-[#333] text-center">
@@ -242,6 +305,15 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* 图片预览弹窗 */}
+      {viewingImage && (
+        <ImageViewer
+          src={viewingImage.src}
+          alt={viewingImage.alt}
+          onClose={() => setViewingImage(null)}
+        />
+      )}
     </div>
   );
 };
