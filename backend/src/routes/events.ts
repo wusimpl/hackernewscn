@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getQueueService } from '../services/queue';
-import { SSEEvent, SSEArticleEvent, SSEStoriesUpdatedEvent } from '../types';
+import { SSEEvent, SSEArticleEvent } from '../types';
 
 const router = Router();
 
@@ -12,8 +12,6 @@ const router = Router();
  * 事件类型:
  * - article.done: 文章翻译完成
  * - article.error: 文章翻译失败
- * - title.done: 标题翻译完成(可选)
- * - stories.updated: 新故事或标题翻译完成 (Requirements 5.1, 5.2)
  */
 router.get('/', (req: Request, res: Response) => {
   // 设置 SSE 响应头
@@ -38,21 +36,8 @@ router.get('/', (req: Request, res: Response) => {
       // 发送 SSE 格式数据
       res.write(`data: ${data}\n\n`);
 
-      // Log event details based on type
-      if (event.type === 'stories.updated') {
-        const storiesEvent = event as SSEStoriesUpdatedEvent;
-        console.log(`[Events API] 推送事件: ${event.type}, stories=${storiesEvent.stories.length}, lastUpdatedAt=${storiesEvent.lastUpdatedAt}`);
-        console.log(`[Events API] stories.updated 详情:`, JSON.stringify({
-          type: storiesEvent.type,
-          storiesCount: storiesEvent.stories.length,
-          storyIds: storiesEvent.stories.map(s => s.id),
-          firstStory: storiesEvent.stories[0],
-          lastUpdatedAt: storiesEvent.lastUpdatedAt
-        }, null, 2));
-      } else {
-        const articleEvent = event as SSEArticleEvent;
-        console.log(`[Events API] 推送事件: ${event.type}, storyId=${articleEvent.storyId}`);
-      }
+      const articleEvent = event as SSEArticleEvent;
+      console.log(`[Events API] 推送事件: ${event.type}, storyId=${articleEvent.storyId}`);
     } catch (error) {
       console.error('[Events API] 发送事件错误:', error);
     }

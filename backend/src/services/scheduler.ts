@@ -5,20 +5,15 @@ import { translateTitlesBatch, translateArticle, translateCommentsBatch, DEFAULT
 import { getQueueService } from './queue';
 import { hashPrompt, setArticleTranslation, getArticleTranslation } from './cache';
 import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository } from '../db/repositories';
-import { Story, StoryWithTranslation, SSEStoriesUpdatedEvent } from '../types';
+import { Story } from '../types';
 
 /**
- * 获取当前调度器配置（优先从数据库读取）
+ * 获取当前调度器配置（直接从 config 读取，config 从 .env 加载）
  */
-async function getSchedulerConfig(): Promise<{ interval: number; storyLimit: number }> {
-  const settingsRepo = new SettingsRepository();
-  
-  const intervalSetting = await settingsRepo.get('scheduler_interval');
-  const storyLimitSetting = await settingsRepo.get('scheduler_story_limit');
-
+function getSchedulerConfig(): { interval: number; storyLimit: number } {
   return {
-    interval: intervalSetting ? parseInt(intervalSetting, 10) : config.scheduler.interval,
-    storyLimit: storyLimitSetting ? parseInt(storyLimitSetting, 10) : config.scheduler.storyLimit,
+    interval: config.scheduler.interval,
+    storyLimit: config.scheduler.storyLimit,
   };
 }
 
@@ -69,7 +64,7 @@ export class SchedulerService {
       return;
     }
 
-    const schedulerConfig = await getSchedulerConfig();
+    const schedulerConfig = getSchedulerConfig();
     console.log(`[Scheduler] Starting with interval: ${schedulerConfig.interval / 1000}s, storyLimit: ${schedulerConfig.storyLimit}`);
 
     // Run immediately on start
@@ -119,7 +114,7 @@ export class SchedulerService {
 
     try {
       // Step 1: Fetch top stories from HN
-      const schedulerConfig = await getSchedulerConfig();
+      const schedulerConfig = getSchedulerConfig();
       const stories = await refreshTopStories(schedulerConfig.storyLimit);
       this.storiesFetched = stories.length;
       console.log(`[Scheduler] Fetched ${stories.length} stories`);
@@ -206,13 +201,6 @@ export class SchedulerService {
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
       console.log(`[Scheduler] Cycle completed in ${duration}s. Translated ${this.titlesTranslated} titles.`);
 
-      // Step 6: Emit SSE event with fully translated stories (标题+文章都翻译完成)
-      // 只推送完全翻译好的故事
-      const fullyTranslatedStories = await this.getFullyTranslatedStories(stories, promptHash);
-      if (fullyTranslatedStories.length > 0) {
-        await this.emitStoriesUpdatedEvent(fullyTranslatedStories);
-      }
-
     } catch (error) {
       console.error('[Scheduler] Error during fetch and translate cycle:', error);
       throw error;
@@ -222,27 +210,31 @@ export class SchedulerService {
   /**
    * Get current scheduler status
    */
-  getStatus(): SchedulerStatus {
+  async getStatus(): Promise<SchedulerStatus> {
+    // 从数据库获取实际的标题翻译总数
+    const titlesCount = await this.titleTranslationRepo.count();
     return {
       isRunning: this.isRunning,
       lastRunAt: this.lastRunAt,
       nextRunAt: this.intervalId ? Date.now() + config.scheduler.interval : null,
       storiesFetched: this.storiesFetched,
-      titlesTranslated: this.titlesTranslated,
+      titlesTranslated: titlesCount,
     };
   }
 
   /**
-   * Get current scheduler status with config (async version)
+   * Get current scheduler status with config
    */
   async getStatusWithConfig(): Promise<SchedulerStatus> {
-    const schedulerConfig = await getSchedulerConfig();
+    const schedulerConfig = getSchedulerConfig();
+    // 从数据库获取实际的标题翻译总数
+    const titlesCount = await this.titleTranslationRepo.count();
     return {
       isRunning: this.isRunning,
       lastRunAt: this.lastRunAt,
       nextRunAt: this.intervalId ? Date.now() + schedulerConfig.interval : null,
       storiesFetched: this.storiesFetched,
-      titlesTranslated: this.titlesTranslated,
+      titlesTranslated: titlesCount,
       currentInterval: schedulerConfig.interval,
       currentStoryLimit: schedulerConfig.storyLimit,
     };
@@ -360,94 +352,6 @@ export class SchedulerService {
     }
 
     return { translatedCount: translations.length, translatedStories };
-  }
-
-  /**
-   * Emit SSE event with newly translated stories
-   * Requirements: 5.1 - Push new stories to connected clients via SSE
-   */
-  private async emitStoriesUpdatedEvent(stories: StoryWithTranslation[]): Promise<void> {
-    const queueService = getQueueService();
-    
-    const event: SSEStoriesUpdatedEvent = {
-      type: 'stories.updated',
-      stories,
-      lastUpdatedAt: this.lastRunAt || Date.now(),
-    };
-
-    console.log(`[Scheduler] 准备推送 stories.updated 事件:`);
-    console.log(`[Scheduler] - stories 数量: ${stories.length}`);
-    console.log(`[Scheduler] - stories IDs: ${stories.map(s => s.id).join(', ')}`);
-    console.log(`[Scheduler] - 第一个 story:`, JSON.stringify(stories[0], null, 2));
-    console.log(`[Scheduler] - lastUpdatedAt: ${event.lastUpdatedAt}`);
-
-    queueService.emitSSEEvent(event);
-    console.log(`[Scheduler] Emitted stories.updated SSE event with ${stories.length} stories`);
-  }
-
-  /**
-   * Get stories that are fully translated (title + article content)
-   * Only returns stories where both title and article are translated
-   */
-  private async getFullyTranslatedStories(stories: Story[], promptHash: string): Promise<StoryWithTranslation[]> {
-    const fullyTranslated: StoryWithTranslation[] = [];
-    
-    // Get all title translations
-    const storyIds = stories.map(s => s.id);
-    const titleTranslations = await this.titleTranslationRepo.findByIds(storyIds);
-    const titleMap = new Map(
-      titleTranslations
-        .filter(t => t.prompt_hash === promptHash)
-        .map(t => [t.story_id, t.title_zh])
-    );
-
-    for (const story of stories) {
-      const translatedTitle = titleMap.get(story.id);
-      
-      // Must have translated title
-      if (!translatedTitle) {
-        continue;
-      }
-
-      // If story has URL, must have translated article
-      if (story.url) {
-        const articleTranslation = await this.articleTranslationRepo.findById(story.id);
-        if (!articleTranslation || articleTranslation.status !== 'done') {
-          continue;
-        }
-        
-        fullyTranslated.push({
-          id: story.id,
-          title: story.title,
-          by: story.by,
-          score: story.score,
-          time: story.time,
-          url: story.url,
-          descendants: story.descendants,
-          translatedTitle,
-          isTranslating: false,
-          hasTranslatedArticle: true,
-          articleStatus: 'done',
-        });
-      } else {
-        // No URL (e.g., Ask HN), only need title translation
-        fullyTranslated.push({
-          id: story.id,
-          title: story.title,
-          by: story.by,
-          score: story.score,
-          time: story.time,
-          url: story.url,
-          descendants: story.descendants,
-          translatedTitle,
-          isTranslating: false,
-          hasTranslatedArticle: false,
-          articleStatus: undefined,
-        });
-      }
-    }
-
-    return fullyTranslated;
   }
 
   /**

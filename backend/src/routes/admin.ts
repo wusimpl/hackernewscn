@@ -1,9 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { getSchedulerService } from '../services/scheduler';
-import { config } from '../config';
+import { config, reloadSchedulerConfig } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { SettingsRepository } from '../db/repositories';
+import { updateEnvVar, deleteEnvVar, getEnvVar } from '../utils/envManager';
 
 const router = Router();
 
@@ -37,7 +37,7 @@ const requireAdminAuth = (req: Request, res: Response, next: NextFunction) => {
 router.post('/trigger', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const scheduler = getSchedulerService();
-    const statusBefore = scheduler.getStatus();
+    const statusBefore = await scheduler.getStatus();
 
     console.log('[Admin] 手动触发调度器');
 
@@ -65,7 +65,7 @@ router.post('/trigger', requireAdminAuth, async (req: Request, res: Response, ne
 router.get('/status', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const scheduler = getSchedulerService();
-    const status = scheduler.getStatus();
+    const status = await scheduler.getStatus();
 
     res.json({
       success: true,
@@ -78,23 +78,26 @@ router.get('/status', requireAdminAuth, async (req: Request, res: Response, next
 
 /**
  * GET /api/admin/scheduler-config
- * 获取调度器配置参数
+ * 获取调度器配置参数（从 .env 读取）
  */
 router.get('/scheduler-config', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const settingsRepo = new SettingsRepository();
-    
-    const intervalSetting = await settingsRepo.get('scheduler_interval');
-    const storyLimitSetting = await settingsRepo.get('scheduler_story_limit');
+    // 从 .env 读取当前配置
+    const intervalEnv = getEnvVar('SCHEDULER_INTERVAL');
+    const storyLimitEnv = getEnvVar('SCHEDULER_STORY_LIMIT');
+
+    // 默认值
+    const DEFAULT_INTERVAL = 300000; // 5分钟
+    const DEFAULT_STORY_LIMIT = 30;
 
     res.json({
       success: true,
       data: {
-        interval: intervalSetting ? parseInt(intervalSetting, 10) : config.scheduler.interval,
-        storyLimit: storyLimitSetting ? parseInt(storyLimitSetting, 10) : config.scheduler.storyLimit,
+        interval: intervalEnv ? parseInt(intervalEnv, 10) : DEFAULT_INTERVAL,
+        storyLimit: storyLimitEnv ? parseInt(storyLimitEnv, 10) : DEFAULT_STORY_LIMIT,
         defaults: {
-          interval: config.scheduler.interval,
-          storyLimit: config.scheduler.storyLimit,
+          interval: DEFAULT_INTERVAL,
+          storyLimit: DEFAULT_STORY_LIMIT,
         },
       },
     });
@@ -105,25 +108,25 @@ router.get('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
 
 /**
  * PUT /api/admin/scheduler-config
- * 更新调度器配置参数
+ * 更新调度器配置参数（写入 .env 文件）
  */
 router.put('/scheduler-config', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = schedulerConfigSchema.parse(req.body);
-    const settingsRepo = new SettingsRepository();
     const scheduler = getSchedulerService();
 
     if (body.interval !== undefined) {
-      await settingsRepo.set('scheduler_interval', body.interval.toString());
+      updateEnvVar('SCHEDULER_INTERVAL', body.interval.toString());
       console.log(`[Admin] 调度间隔已更新为 ${body.interval}ms`);
     }
 
     if (body.storyLimit !== undefined) {
-      await settingsRepo.set('scheduler_story_limit', body.storyLimit.toString());
+      updateEnvVar('SCHEDULER_STORY_LIMIT', body.storyLimit.toString());
       console.log(`[Admin] 抓取数量已更新为 ${body.storyLimit}`);
     }
 
-    // 重启调度器以应用新配置
+    // 重新加载配置并重启调度器
+    reloadSchedulerConfig();
     scheduler.restart();
 
     res.json({
@@ -141,27 +144,32 @@ router.put('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
 
 /**
  * POST /api/admin/scheduler-config/reset
- * 重置调度器配置为默认值
+ * 重置调度器配置为默认值（从 .env 删除自定义配置）
  */
 router.post('/scheduler-config/reset', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const settingsRepo = new SettingsRepository();
     const scheduler = getSchedulerService();
 
-    await settingsRepo.delete('scheduler_interval');
-    await settingsRepo.delete('scheduler_story_limit');
+    // 默认值
+    const DEFAULT_INTERVAL = 300000; // 5分钟
+    const DEFAULT_STORY_LIMIT = 30;
+
+    // 从 .env 删除自定义配置
+    deleteEnvVar('SCHEDULER_INTERVAL');
+    deleteEnvVar('SCHEDULER_STORY_LIMIT');
 
     console.log('[Admin] 调度配置已重置为默认值');
 
-    // 重启调度器以应用默认配置
+    // 重新加载配置并重启调度器
+    reloadSchedulerConfig();
     scheduler.restart();
 
     res.json({
       success: true,
       data: {
         message: '调度配置已重置为默认值',
-        interval: config.scheduler.interval,
-        storyLimit: config.scheduler.storyLimit,
+        interval: DEFAULT_INTERVAL,
+        storyLimit: DEFAULT_STORY_LIMIT,
       },
     });
   } catch (error) {

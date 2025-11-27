@@ -47,6 +47,15 @@ export const config = {
   isDevelopment: process.env.NODE_ENV !== 'production',
 };
 
+/**
+ * 重新加载调度器配置（从 process.env 读取最新值）
+ */
+export function reloadSchedulerConfig(): void {
+  config.scheduler.interval = parseInt(process.env.SCHEDULER_INTERVAL || '300000', 10);
+  config.scheduler.storyLimit = parseInt(process.env.SCHEDULER_STORY_LIMIT || '30', 10);
+  console.log(`[Config] 调度器配置已重新加载: interval=${config.scheduler.interval}ms, storyLimit=${config.scheduler.storyLimit}`);
+}
+
 // 验证必需的环境变量
 if (!config.llm.apiKey) {
   console.warn('警告: OPENAI_API_KEY 未设置');

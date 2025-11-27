@@ -114,7 +114,8 @@ export const AdminPanel: React.FC = () => {
           title: record.title_snapshot,
           content: record.content_markdown,
           originalUrl: record.original_url,
-          timestamp: record.updated_at || Date.now()
+          // updated_at 在数据库中是秒级时间戳，需要转换为毫秒
+          timestamp: (record.updated_at || 0) * 1000 || Date.now()
         }));
       setArticleCache(articles);
     } catch {

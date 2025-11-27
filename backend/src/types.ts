@@ -95,7 +95,7 @@ export interface StoryWithTranslation extends Story {
 }
 
 // SSE 事件类型
-export type SSEEventType = 'article.done' | 'article.error' | 'title.done' | 'stories.updated';
+export type SSEEventType = 'article.done' | 'article.error' | 'title.done';
 
 // Base SSE event interface
 export interface SSEEventBase {
@@ -115,15 +115,8 @@ export interface SSEArticleEvent extends SSEEventBase {
   story?: StoryWithTranslation;
 }
 
-// Stories updated SSE event (Requirements 5.1, 5.2)
-export interface SSEStoriesUpdatedEvent extends SSEEventBase {
-  type: 'stories.updated';
-  stories: StoryWithTranslation[];
-  lastUpdatedAt: number;
-}
-
 // Union type for all SSE events
-export type SSEEvent = SSEArticleEvent | SSEStoriesUpdatedEvent;
+export type SSEEvent = SSEArticleEvent;
 
 // Comment types
 export interface Comment {
