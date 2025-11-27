@@ -480,6 +480,8 @@ const App: React.FC = () => {
         content={readerContent}
         isLoading={readerLoading}
         statusMessage={readerStatus}
+        storyId={activeStory?.id}
+        commentCount={activeStory?.descendants}
       />
 
       {notification && (
