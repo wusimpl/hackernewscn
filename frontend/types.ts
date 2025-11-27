@@ -105,3 +105,22 @@ export enum LoadingState {
   TRANSLATING = 'TRANSLATING',
   ERROR = 'ERROR'
 }
+
+// Comment types for the comments feature
+export interface CommentTreeNode {
+  id: number;
+  author: string | null;
+  text: string | null;
+  time: number;
+  deleted: boolean;
+  dead: boolean;
+  children: CommentTreeNode[];
+}
+
+export interface CommentsData {
+  storyId: number;
+  comments: CommentTreeNode[];
+  totalCount: number;
+}
+
+export type CommentsApiResponse = ApiResponse<CommentsData>;

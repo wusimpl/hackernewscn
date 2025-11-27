@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Story } from '../types';
+import { CommentsPanel } from './CommentsPanel';
 
 interface StoryItemProps {
   story: Story;
@@ -33,6 +34,8 @@ const getDomain = (url?: string) => {
 };
 
 export const StoryItem: React.FC<StoryItemProps> = ({ story, index, onRead }) => {
+  const [showComments, setShowComments] = useState(false);
+
   // Handle main click
   const handleClick = (e: React.MouseEvent) => {
     if (story.url) {
@@ -41,6 +44,18 @@ export const StoryItem: React.FC<StoryItemProps> = ({ story, index, onRead }) =>
       if (story.isArticleTranslating) return;
       onRead(story);
     }
+  };
+
+  // Handle comments button click
+  const handleCommentsClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setShowComments(true);
+  };
+
+  // Handle closing comments panel
+  const handleCloseComments = () => {
+    setShowComments(false);
   };
 
   return (
@@ -117,14 +132,12 @@ export const StoryItem: React.FC<StoryItemProps> = ({ story, index, onRead }) =>
             <span>作者 {story.by}</span>
             <span>{timeAgo(story.time)}</span>
             <span>|</span>
-            <a
-              href={`https://news.ycombinator.com/item?id=${story.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:underline"
+            <button
+              onClick={handleCommentsClick}
+              className="hover:underline hover:text-[#ff6600] transition-colors cursor-pointer bg-transparent border-none p-0 text-[#828282] text-xs"
             >
               {story.descendants || 0} 评论
-            </a>
+            </button>
 
             {story.isTranslating && (
               <span className="ml-2 text-[#ff6600] animate-pulse">
@@ -134,6 +147,15 @@ export const StoryItem: React.FC<StoryItemProps> = ({ story, index, onRead }) =>
           </div>
         </div>
       </div>
+
+      {/* Comments Panel */}
+      <CommentsPanel
+        isOpen={showComments}
+        onClose={handleCloseComments}
+        storyId={story.id}
+        storyTitle={story.translatedTitle || story.title}
+        mode="overlay"
+      />
     </div>
   );
 };

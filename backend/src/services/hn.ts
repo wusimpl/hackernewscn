@@ -1,6 +1,6 @@
 import fetch, { Response } from 'node-fetch';
 import { StoryRepository } from '../db/repositories';
-import { Story, StoryRecord } from '../types';
+import { Story, StoryRecord, CommentRecord } from '../types';
 
 const BASE_URL = 'https://hacker-news.firebaseio.com/v0';
 
@@ -194,4 +194,146 @@ export const loadMoreStories = async (cursor: number, limit: number): Promise<St
   const topIds = await fetchTopStoryIds();
   const targetIds = topIds.slice(cursor, cursor + limit);
   return fetchAndCacheStories(targetIds, cursor);
+};
+
+// ============================================
+// Comment Fetching Functions
+// ============================================
+
+// HN API 返回的评论数据结构
+interface HnCommentRaw {
+  id: number;
+  type: 'comment';
+  by?: string;        // 作者，deleted 评论没有
+  text?: string;      // 评论内容，deleted 评论没有
+  time: number;
+  parent: number;     // 父评论或文章 ID
+  kids?: number[];    // 子评论 ID 列表
+  deleted?: boolean;
+  dead?: boolean;
+}
+
+/**
+ * 获取单个评论
+ * @param id 评论 ID
+ * @returns 评论数据或 null（如果获取失败）
+ * Requirements: 1.4 - Use fetchWithRetry for resilience
+ */
+export const fetchComment = async (id: number): Promise<HnCommentRaw | null> => {
+  try {
+    const response = await fetchWithRetry(`${BASE_URL}/item/${id}.json`);
+    if (!response) {
+      console.warn(`[HN Service] Failed to fetch comment ${id}`);
+      return null;
+    }
+    const item = await response.json() as HnCommentRaw | null;
+    
+    // HN API returns null for deleted items sometimes
+    if (!item) {
+      return null;
+    }
+    
+    // Only return if it's a comment type
+    if (item.type !== 'comment') {
+      return null;
+    }
+    
+    return item;
+  } catch (error) {
+    console.error(`[HN Service] Error fetching comment ${id}:`, error);
+    return null;
+  }
+};
+
+/**
+ * 递归获取评论树
+ * @param commentIds 评论 ID 数组
+ * @param storyId 故事 ID（用于设置 story_id 字段）
+ * @returns 所有评论的扁平数组（包括嵌套的子评论）
+ * Requirements: 1.3 - Recursively fetch all nested replies
+ * Requirements: 1.4 - Continue fetching other comments if some fail
+ */
+export const fetchCommentsTree = async (
+  commentIds: number[],
+  storyId: number
+): Promise<Omit<CommentRecord, 'fetched_at'>[]> => {
+  if (!commentIds || commentIds.length === 0) {
+    return [];
+  }
+
+  const allComments: Omit<CommentRecord, 'fetched_at'>[] = [];
+  
+  // Fetch all comments at this level in parallel
+  const commentPromises = commentIds.map(id => fetchComment(id));
+  const comments = await Promise.all(commentPromises);
+  
+  // Process each comment and recursively fetch children
+  const childPromises: Promise<Omit<CommentRecord, 'fetched_at'>[]>[] = [];
+  
+  for (let i = 0; i < comments.length; i++) {
+    const comment = comments[i];
+    const commentId = commentIds[i];
+    
+    if (comment) {
+      // Convert to CommentRecord format
+      const record: Omit<CommentRecord, 'fetched_at'> = {
+        comment_id: comment.id,
+        story_id: storyId,
+        parent_id: comment.parent,
+        author: comment.by || null,
+        text: comment.text || null,
+        time: comment.time,
+        kids: JSON.stringify(comment.kids || []),
+        deleted: comment.deleted ? 1 : 0,
+        dead: comment.dead ? 1 : 0,
+      };
+      
+      allComments.push(record);
+      
+      // Queue recursive fetch for children
+      if (comment.kids && comment.kids.length > 0) {
+        childPromises.push(fetchCommentsTree(comment.kids, storyId));
+      }
+    } else {
+      // Comment fetch failed, log and continue (Requirements: 1.4)
+      console.warn(`[HN Service] Comment ${commentId} fetch failed, continuing with others`);
+    }
+  }
+  
+  // Wait for all child fetches to complete
+  if (childPromises.length > 0) {
+    const childResults = await Promise.all(childPromises);
+    for (const children of childResults) {
+      allComments.push(...children);
+    }
+  }
+  
+  return allComments;
+};
+
+/**
+ * 获取文章的所有评论
+ * @param storyId 故事 ID
+ * @param kids 顶级评论 ID 数组（来自故事的 kids 字段）
+ * @returns 所有评论的扁平数组
+ * Requirements: 1.1 - Fetch all comments for a story
+ */
+export const fetchStoryComments = async (
+  storyId: number,
+  kids: number[]
+): Promise<Omit<CommentRecord, 'fetched_at'>[]> => {
+  if (!kids || kids.length === 0) {
+    console.log(`[HN Service] Story ${storyId} has no comments`);
+    return [];
+  }
+  
+  console.log(`[HN Service] Fetching ${kids.length} top-level comments for story ${storyId}`);
+  const startTime = Date.now();
+  
+  const comments = await fetchCommentsTree(kids, storyId);
+  
+  const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log(`[HN Service] Fetched ${comments.length} total comments for story ${storyId} in ${duration}s`);
+  
+  return comments;
 };

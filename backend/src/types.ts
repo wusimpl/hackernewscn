@@ -124,3 +124,41 @@ export interface SSEStoriesUpdatedEvent extends SSEEventBase {
 
 // Union type for all SSE events
 export type SSEEvent = SSEArticleEvent | SSEStoriesUpdatedEvent;
+
+// Comment types
+export interface Comment {
+  id: number;
+  storyId: number;
+  parentId: number;
+  author: string | null;
+  text: string | null;
+  time: number;
+  kids: number[];
+  deleted: boolean;
+  dead: boolean;
+}
+
+// Database comment record
+export interface CommentRecord {
+  comment_id: number;
+  story_id: number;
+  parent_id: number;
+  author: string | null;
+  text: string | null;
+  time: number;
+  kids: string; // JSON array string
+  deleted: number; // SQLite boolean (0 or 1)
+  dead: number; // SQLite boolean (0 or 1)
+  fetched_at: number;
+}
+
+// Comment tree node for API response
+export interface CommentTreeNode {
+  id: number;
+  author: string | null;
+  text: string | null;
+  time: number;
+  deleted: boolean;
+  dead: boolean;
+  children: CommentTreeNode[];
+}

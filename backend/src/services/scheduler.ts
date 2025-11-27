@@ -1,10 +1,10 @@
 import fetch from 'node-fetch';
 import { config } from '../config';
-import { refreshTopStories, saveStoryToDatabase } from './hn';
+import { refreshTopStories, saveStoryToDatabase, fetchStoryComments } from './hn';
 import { translateTitlesBatch, translateArticle, DEFAULT_PROMPT } from './llm';
 import { getQueueService } from './queue';
 import { hashPrompt, setArticleTranslation, getArticleTranslation } from './cache';
-import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository } from '../db/repositories';
+import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository } from '../db/repositories';
 import { Story, StoryWithTranslation, SSEStoriesUpdatedEvent } from '../types';
 
 /**
@@ -49,11 +49,13 @@ export class SchedulerService {
   private titleTranslationRepo: TitleTranslationRepository;
   private settingsRepo: SettingsRepository;
   private articleTranslationRepo: ArticleTranslationRepository;
+  private commentRepo: CommentRepository;
 
   constructor() {
     this.titleTranslationRepo = new TitleTranslationRepository();
     this.settingsRepo = new SettingsRepository();
     this.articleTranslationRepo = new ArticleTranslationRepository();
+    this.commentRepo = new CommentRepository();
   }
 
   /**
@@ -563,6 +565,9 @@ export class SchedulerService {
       await saveStoryToDatabase(story);
       console.log(`[Scheduler] Story ${story.id} saved after article translation completed`);
 
+      // Fetch and store comments for the story (Requirements: 1.1, 1.2)
+      await this.fetchAndStoreComments(story);
+
       // Emit SSE event for article completion with full story info
       const queueService = getQueueService();
       const sseEvent = {
@@ -592,6 +597,57 @@ export class SchedulerService {
     } catch (error) {
       console.error(`[Scheduler] Failed to translate article ${story.id}:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Fetch and store comments for a story
+   * Requirements: 1.1 - Fetch all comments when scheduler fetches a story
+   * Requirements: 1.2 - Store complete comment tree structure in database
+   */
+  private async fetchAndStoreComments(story: Story): Promise<void> {
+    try {
+      // Check if story has comments (descendants > 0)
+      if (!story.descendants || story.descendants === 0) {
+        console.log(`[Scheduler] Story ${story.id} has no comments, skipping comment fetch`);
+        return;
+      }
+
+      // Check if we already have comments for this story
+      const hasExistingComments = await this.commentRepo.hasComments(story.id);
+      if (hasExistingComments) {
+        console.log(`[Scheduler] Story ${story.id} already has cached comments, skipping`);
+        return;
+      }
+
+      // Get the story's kids (top-level comment IDs) from HN API
+      const { fetchStoryDetails } = await import('./hn');
+      const storyDetails = await fetchStoryDetails(story.id);
+      
+      if (!storyDetails || !storyDetails.descendants) {
+        console.log(`[Scheduler] Could not fetch story details for ${story.id}`);
+        return;
+      }
+
+      const kids = (storyDetails as any).kids as number[] | undefined;
+      if (!kids || kids.length === 0) {
+        console.log(`[Scheduler] Story ${story.id} has no top-level comments`);
+        return;
+      }
+
+      console.log(`[Scheduler] Fetching ${kids.length} top-level comments for story ${story.id}`);
+      
+      // Fetch all comments recursively
+      const comments = await fetchStoryComments(story.id, kids);
+      
+      if (comments.length > 0) {
+        // Store comments in database
+        await this.commentRepo.upsertMany(comments);
+        console.log(`[Scheduler] Stored ${comments.length} comments for story ${story.id}`);
+      }
+    } catch (error) {
+      // Log error but don't fail the article translation (Requirements: 1.4)
+      console.error(`[Scheduler] Failed to fetch comments for story ${story.id}:`, error);
     }
   }
 }

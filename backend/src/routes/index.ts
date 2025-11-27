@@ -5,6 +5,7 @@ import articlesRouter from './articles';
 import settingsRouter from './settings';
 import eventsRouter from './events';
 import adminRouter from './admin';
+import commentsRouter from './comments';
 
 const router = Router();
 
@@ -15,5 +16,6 @@ router.use('/articles', articlesRouter);
 router.use('/settings', settingsRouter);
 router.use('/events', eventsRouter);
 router.use('/admin', adminRouter);
+router.use('/comments', commentsRouter);
 
 export default router;

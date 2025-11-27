@@ -89,5 +89,26 @@ CREATE TABLE IF NOT EXISTS scheduler_status (
 INSERT OR IGNORE INTO scheduler_status (id, last_run_at, stories_fetched, titles_translated, updated_at)
 VALUES (1, NULL, 0, 0, strftime('%s', 'now'));
 
+-- 评论表
+CREATE TABLE IF NOT EXISTS comments (
+  comment_id INTEGER PRIMARY KEY,
+  story_id INTEGER NOT NULL,
+  parent_id INTEGER NOT NULL,
+  author TEXT,
+  text TEXT,
+  time INTEGER NOT NULL,
+  kids TEXT DEFAULT '[]',
+  deleted INTEGER DEFAULT 0,
+  dead INTEGER DEFAULT 0,
+  fetched_at INTEGER NOT NULL,
+  FOREIGN KEY (story_id) REFERENCES stories(story_id) ON DELETE CASCADE
+);
+
+-- 索引：按文章查询评论
+CREATE INDEX IF NOT EXISTS idx_comments_story_id ON comments(story_id);
+
+-- 索引：按父评论查询子评论
+CREATE INDEX IF NOT EXISTS idx_comments_parent_id ON comments(parent_id);
+
 -- 插入初始版本号
 INSERT OR IGNORE INTO db_version (version, applied_at) VALUES (1, strftime('%s', 'now'));
