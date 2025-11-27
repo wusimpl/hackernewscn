@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CommentsPanel } from './CommentsPanel';
+import { ArticleChat } from './ArticleChat';
 
 interface ReaderModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
 }) => {
   const contentRef = useRef<HTMLDivElement>(null);
   const [showComments, setShowComments] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   // 检测是否为移动端
@@ -40,18 +42,25 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // 当打开新文章或内容变化时，滚动到顶部并关闭评论
+  // 当打开新文章或内容变化时，滚动到顶部并关闭评论和聊天
   useEffect(() => {
     if (isOpen && contentRef.current) {
       contentRef.current.scrollTop = 0;
     }
     setShowComments(false);
-  }, [isOpen, title]); // 使用 title 作为依赖，因为每篇文章的标题不同
+    setShowChat(false);
+  }, [isOpen, title]);
 
   if (!isOpen) return null;
 
   const handleCommentsToggle = () => {
     setShowComments(!showComments);
+    if (!showComments) setShowChat(false); // 打开评论时关闭聊天
+  };
+
+  const handleChatToggle = () => {
+    setShowChat(!showChat);
+    if (!showChat) setShowComments(false); // 打开聊天时关闭评论
   };
 
   // 移动端评论覆盖模式
@@ -74,8 +83,29 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
     );
   }
 
+  // 移动端聊天覆盖模式
+  if (isMobile && showChat && storyId) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm" onClick={onClose}>
+        <div 
+          className="bg-[#1a1a1a] w-full h-full flex flex-col"
+          onClick={e => e.stopPropagation()}
+        >
+          <ArticleChat
+            isOpen={true}
+            onClose={() => setShowChat(false)}
+            storyId={storyId}
+            articleTitle={title}
+            articleContent={content}
+            mode="overlay"
+          />
+        </div>
+      </div>
+    );
+  }
+
   // 桌面端分栏布局
-  const showSideBySide = !isMobile && showComments && storyId;
+  const showSideBySide = !isMobile && (showComments || showChat) && storyId;
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-0 sm:p-4 backdrop-blur-sm" onClick={onClose}>
@@ -105,6 +135,23 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
                )}
             </div>
             <div className="flex items-center gap-2">
+              {/* Chat按钮 */}
+              {storyId && content && !isLoading && (
+                <button
+                  onClick={handleChatToggle}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded transition-colors text-sm ${
+                    showChat 
+                      ? 'bg-[#ff6600] text-white' 
+                      : 'text-[#828282] hover:text-white hover:bg-[#333]'
+                  }`}
+                  title="与文章对话"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                  </svg>
+                  <span>Chat</span>
+                </button>
+              )}
               {/* 评论按钮 */}
               {storyId && (
                 <button
@@ -169,13 +216,27 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
         </div>
 
         {/* 桌面端评论区域 */}
-        {showSideBySide && (
+        {showSideBySide && showComments && storyId && (
           <div className="w-1/2 flex flex-col">
             <CommentsPanel
               isOpen={true}
               onClose={() => setShowComments(false)}
               storyId={storyId}
               storyTitle={title}
+              mode="side-by-side"
+            />
+          </div>
+        )}
+
+        {/* 桌面端聊天区域 */}
+        {showSideBySide && showChat && storyId && (
+          <div className="w-1/2 flex flex-col">
+            <ArticleChat
+              isOpen={true}
+              onClose={() => setShowChat(false)}
+              storyId={storyId}
+              articleTitle={title}
+              articleContent={content}
               mode="side-by-side"
             />
           </div>

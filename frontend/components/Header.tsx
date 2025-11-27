@@ -24,13 +24,6 @@ export const Header: React.FC<HeaderProps> = ({
         <h1 className="font-bold text-sm sm:text-base whitespace-nowrap">
           Hacker News <span className="font-normal opacity-80">CN</span>
         </h1>
-        <nav className="hidden sm:flex text-sm gap-2 ml-4 border-l border-black/20 pl-4">
-          <span className="cursor-pointer hover:underline">new</span>
-          <span>|</span>
-          <span className="cursor-pointer hover:underline">past</span>
-          <span>|</span>
-          <span className="cursor-pointer hover:underline">comments</span>
-        </nav>
       </div>
 
       <div className="flex items-center gap-3 text-xs sm:text-sm">
