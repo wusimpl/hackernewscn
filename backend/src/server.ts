@@ -7,7 +7,7 @@ import apiRouter from './routes';
 import { requestLogger } from './middleware/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { generalRateLimit } from './middleware/rateLimit';
-import { getSchedulerService } from './services/scheduler';
+import { getSchedulerService, getCommentRefreshService } from './services/scheduler';
 
 const app = express();
 
@@ -55,6 +55,11 @@ async function startServer() {
     scheduler.start();
     console.log('✅ 调度器启动成功');
 
+    // Initialize and start the comment refresh service
+    const commentRefresh = getCommentRefreshService();
+    commentRefresh.start();
+    console.log('✅ 评论刷新服务启动成功');
+
     const server = app.listen(config.port, () => {
       console.log(`\n🚀 服务器运行在端口 ${config.port}`);
       console.log(`📝 环境: ${config.isDevelopment ? '开发' : '生产'}`);
@@ -68,6 +73,10 @@ async function startServer() {
       // Stop the scheduler first
       scheduler.stop();
       console.log('✅ 调度器已停止');
+
+      // Stop the comment refresh service
+      commentRefresh.stop();
+      console.log('✅ 评论刷新服务已停止');
 
       // Close the HTTP server
       server.close((err) => {

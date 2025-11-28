@@ -120,6 +120,21 @@ export class StoryRepository {
     );
   }
 
+  // 获取最新的N篇文章（按时间倒序）
+  async findLatest(limit: number = 30): Promise<StoryRecord[]> {
+    const db = await getDatabase();
+    const result = db.exec(
+      'SELECT * FROM stories ORDER BY time DESC LIMIT ?',
+      [limit]
+    );
+
+    if (result.length === 0) return [];
+
+    return result[0].values.map(row =>
+      this.mapRowToStory(result[0].columns, row)
+    );
+  }
+
   // 检查故事是否存在
   async exists(storyId: number): Promise<boolean> {
     const db = await getDatabase();
