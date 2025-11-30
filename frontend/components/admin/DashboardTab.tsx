@@ -36,6 +36,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
 export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onMessage, onError }) => {
   const [triggering, setTriggering] = useState(false);
+  const [triggeringComments, setTriggeringComments] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
 
@@ -93,6 +94,30 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
   const handleRefresh = () => {
     onRefresh();
     fetchStats();
+  };
+
+  const handleTriggerComments = async () => {
+    setTriggeringComments(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/comment-refresh/trigger`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${password}` },
+      });
+      if (res.ok) {
+        onMessage('评论刷新已触发，正在后台执行...');
+        setTimeout(() => {
+          onRefresh();
+          fetchStats();
+        }, 3000);
+      } else {
+        const data = await res.json();
+        onError(data.error?.message || '触发失败');
+      }
+    } catch {
+      onError('请求失败');
+    } finally {
+      setTriggeringComments(false);
+    }
   };
 
   const formatTime = (ts: number | null) => {
@@ -242,7 +267,17 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
             {triggering && (
               <span className="w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
             )}
-            {triggering ? '执行中...' : '立即抓取'}
+            {triggering ? '执行中...' : '立即抓取最新文章'}
+          </button>
+          <button
+            onClick={handleTriggerComments}
+            disabled={triggeringComments}
+            className="bg-[#1a1a1a] text-[#dcdcdc] px-6 py-2.5 rounded font-medium hover:bg-[#242424] transition-colors border border-[#444] disabled:opacity-50 flex items-center gap-2"
+          >
+            {triggeringComments && (
+              <span className="w-4 h-4 border-2 border-[#dcdcdc]/30 border-t-[#dcdcdc] rounded-full animate-spin" />
+            )}
+            {triggeringComments ? '执行中...' : '立即更新评论'}
           </button>
           <button
             onClick={handleRefresh}

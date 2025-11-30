@@ -1,11 +1,11 @@
 import fetch from 'node-fetch';
-import { config } from '../config';
-import { refreshTopStories, saveStoryToDatabase, fetchStoryComments } from './hn';
+import { config, reloadCommentRefreshConfig } from '../config';
+import { refreshTopStories, saveStoryToDatabase, fetchStoryComments, fetchStoryDetails } from './hn';
 import { translateTitlesBatch, translateArticle, translateCommentsBatch, DEFAULT_PROMPT } from './llm';
 import { getQueueService } from './queue';
 import { hashPrompt, setArticleTranslation, getArticleTranslation } from './cache';
-import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository } from '../db/repositories';
-import { Story } from '../types';
+import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository, StoryRepository } from '../db/repositories';
+import { Story, CommentRecord } from '../types';
 
 /**
  * 获取当前调度器配置（直接从 config 读取，config 从 .env 加载）
@@ -706,4 +706,334 @@ export function getSchedulerService(): SchedulerService {
     schedulerInstance = new SchedulerService();
   }
   return schedulerInstance;
+}
+
+// ============================================
+// Comment Refresh Service
+// ============================================
+
+/**
+ * 获取评论刷新配置
+ */
+function getCommentRefreshConfig() {
+  return {
+    enabled: config.commentRefresh.enabled,
+    interval: config.commentRefresh.interval,
+    storyLimit: config.commentRefresh.storyLimit,
+    batchSize: config.commentRefresh.batchSize,
+  };
+}
+
+/**
+ * 评论刷新服务状态
+ */
+export interface CommentRefreshStatus {
+  isRunning: boolean;
+  enabled: boolean;
+  lastRunAt: number | null;
+  nextRunAt: number | null;
+  storiesProcessed: number;
+  commentsRefreshed: number;
+  currentInterval?: number;
+  currentStoryLimit?: number;
+  currentBatchSize?: number;
+}
+
+/**
+ * 评论刷新服务
+ * 定时刷新最新文章的评论，处理新增评论并翻译
+ */
+export class CommentRefreshService {
+  private intervalId: NodeJS.Timeout | null = null;
+  private isRunning: boolean = false;
+  private lastRunAt: number | null = null;
+  private nextRunAt: number | null = null;
+  private storiesProcessed: number = 0;
+  private commentsRefreshed: number = 0;
+
+  private storyRepo: StoryRepository;
+  private commentRepo: CommentRepository;
+  private commentTranslationRepo: CommentTranslationRepository;
+  private settingsRepo: SettingsRepository;
+
+  constructor() {
+    this.storyRepo = new StoryRepository();
+    this.commentRepo = new CommentRepository();
+    this.commentTranslationRepo = new CommentTranslationRepository();
+    this.settingsRepo = new SettingsRepository();
+  }
+
+  /**
+   * 启动评论刷新服务
+   */
+  async start(): Promise<void> {
+    const refreshConfig = getCommentRefreshConfig();
+    
+    if (!refreshConfig.enabled) {
+      console.log('[CommentRefresh] 评论刷新服务已禁用');
+      return;
+    }
+
+    if (this.intervalId) {
+      console.log('[CommentRefresh] 服务已在运行');
+      return;
+    }
+
+    console.log(`[CommentRefresh] 启动服务: interval=${refreshConfig.interval / 1000}s, storyLimit=${refreshConfig.storyLimit}, batchSize=${refreshConfig.batchSize}`);
+
+    // 首次运行延迟 30 秒，避免与主调度器冲突
+    setTimeout(() => {
+      this.runOnce().catch(err => {
+        console.error('[CommentRefresh] 首次运行失败:', err);
+      });
+    }, 30000);
+
+    this.nextRunAt = Date.now() + refreshConfig.interval;
+
+    this.intervalId = setInterval(() => {
+      this.runOnce().catch(err => {
+        console.error('[CommentRefresh] 定时运行失败:', err);
+      });
+      this.nextRunAt = Date.now() + refreshConfig.interval;
+    }, refreshConfig.interval);
+
+    this.isRunning = true;
+    console.log('[CommentRefresh] 服务启动成功');
+  }
+
+  /**
+   * 停止服务
+   */
+  stop(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+      this.isRunning = false;
+      this.nextRunAt = null;
+      console.log('[CommentRefresh] 服务已停止');
+    }
+  }
+
+  /**
+   * 重启服务
+   */
+  restart(): void {
+    console.log('[CommentRefresh] 重启服务...');
+    this.stop();
+    this.start();
+  }
+
+  /**
+   * 执行一次评论刷新
+   */
+  async runOnce(): Promise<void> {
+    const refreshConfig = getCommentRefreshConfig();
+    
+    if (!refreshConfig.enabled) {
+      console.log('[CommentRefresh] 服务已禁用，跳过执行');
+      return;
+    }
+
+    console.log('[CommentRefresh] 开始刷新评论...');
+    const startTime = Date.now();
+
+    try {
+      // 获取最新的 N 篇文章（按 time 降序）
+      const stories = await this.storyRepo.findLatest(refreshConfig.storyLimit);
+      
+      if (stories.length === 0) {
+        console.log('[CommentRefresh] 没有文章需要刷新评论');
+        this.lastRunAt = Date.now();
+        return;
+      }
+
+      console.log(`[CommentRefresh] 找到 ${stories.length} 篇文章需要刷新评论`);
+
+      // 获取自定义提示词
+      const customPrompt = await this.settingsRepo.get('custom_prompt') || DEFAULT_PROMPT;
+
+      // 分批处理
+      const batchSize = refreshConfig.batchSize;
+      let totalCommentsRefreshed = 0;
+      let totalStoriesProcessed = 0;
+
+      for (let i = 0; i < stories.length; i += batchSize) {
+        const batch = stories.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(stories.length / batchSize);
+
+        console.log(`[CommentRefresh] === 第 ${batchNum}/${totalBatches} 批：处理 ${batch.length} 篇文章 ===`);
+
+        // 并发处理这一批文章
+        const results = await Promise.allSettled(
+          batch.map(story => this.refreshStoryComments(story, customPrompt))
+        );
+
+        // 统计结果
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            totalCommentsRefreshed += result.value;
+            totalStoriesProcessed++;
+          }
+        }
+
+        console.log(`[CommentRefresh] === 第 ${batchNum}/${totalBatches} 批完成 ===`);
+      }
+
+      this.storiesProcessed = totalStoriesProcessed;
+      this.commentsRefreshed = totalCommentsRefreshed;
+      this.lastRunAt = Date.now();
+
+      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+      console.log(`[CommentRefresh] 刷新完成: ${duration}s, 处理 ${totalStoriesProcessed} 篇文章, 刷新 ${totalCommentsRefreshed} 条评论`);
+
+    } catch (error) {
+      console.error('[CommentRefresh] 刷新失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 刷新单篇文章的评论
+   * @returns 新增/更新的评论数量
+   */
+  private async refreshStoryComments(story: { story_id: number; descendants?: number }, customPrompt: string): Promise<number> {
+    try {
+      // 从 HN API 获取最新的故事详情
+      const storyDetails = await fetchStoryDetails(story.story_id);
+      
+      if (!storyDetails) {
+        console.log(`[CommentRefresh] 无法获取文章 ${story.story_id} 的详情`);
+        return 0;
+      }
+
+      const kids = (storyDetails as any).kids as number[] | undefined;
+      if (!kids || kids.length === 0) {
+        console.log(`[CommentRefresh] 文章 ${story.story_id} 没有评论`);
+        return 0;
+      }
+
+      // 获取现有评论 ID
+      const existingComments = await this.commentRepo.findByStoryId(story.story_id);
+      const existingCommentIds = new Set(existingComments.map(c => c.comment_id));
+
+      // 获取所有评论（包括新评论）
+      const allComments = await fetchStoryComments(story.story_id, kids);
+      
+      if (allComments.length === 0) {
+        return 0;
+      }
+
+      // 找出新评论（不在现有评论中的）
+      const newComments = allComments.filter(c => !existingCommentIds.has(c.comment_id));
+      
+      // 找出需要更新的评论（已存在但可能有变化的）
+      const updatedComments = allComments.filter(c => existingCommentIds.has(c.comment_id));
+
+      console.log(`[CommentRefresh] 文章 ${story.story_id}: 总评论 ${allComments.length}, 新增 ${newComments.length}, 已存在 ${updatedComments.length}`);
+
+      // 获取现有翻译
+      const existingTranslations = await this.commentTranslationRepo.findByStoryId(story.story_id);
+      const existingTranslationIds = new Set(existingTranslations.map(t => t.comment_id));
+
+      // 找出需要翻译的新评论（有文本内容且未翻译）
+      const commentsToTranslate = newComments.filter(c => 
+        c.text && 
+        c.text.trim().length > 0 && 
+        !c.deleted && 
+        !c.dead &&
+        !existingTranslationIds.has(c.comment_id)
+      );
+
+      // 限制翻译数量
+      const maxComments = config.commentTranslation.maxComments;
+      const limitedCommentsToTranslate = commentsToTranslate.slice(0, maxComments);
+
+      let translations: { comment_id: number; text_en: string; text_zh: string }[] = [];
+
+      if (limitedCommentsToTranslate.length > 0) {
+        console.log(`[CommentRefresh] 翻译 ${limitedCommentsToTranslate.length} 条新评论`);
+
+        // 翻译新评论
+        const items = limitedCommentsToTranslate.map(c => ({
+          id: c.comment_id,
+          text: c.text!,
+        }));
+
+        const results = await translateCommentsBatch(items, customPrompt);
+        const resultMap = new Map(results.map(r => [r.id, r.translatedText]));
+
+        translations = limitedCommentsToTranslate
+          .filter(c => resultMap.has(c.comment_id))
+          .map(c => ({
+            comment_id: c.comment_id,
+            text_en: c.text!,
+            text_zh: resultMap.get(c.comment_id)!,
+          }));
+      }
+
+      // 保存所有评论（新增 + 更新）
+      if (allComments.length > 0) {
+        await this.commentRepo.upsertMany(allComments);
+      }
+
+      // 保存翻译
+      if (translations.length > 0) {
+        await this.commentTranslationRepo.upsertMany(translations);
+        console.log(`[CommentRefresh] 保存 ${translations.length} 条评论翻译`);
+      }
+
+      return newComments.length;
+
+    } catch (error) {
+      console.error(`[CommentRefresh] 刷新文章 ${story.story_id} 评论失败:`, error);
+      return 0;
+    }
+  }
+
+  /**
+   * 获取服务状态
+   */
+  async getStatus(): Promise<CommentRefreshStatus> {
+    const refreshConfig = getCommentRefreshConfig();
+    return {
+      isRunning: this.isRunning,
+      enabled: refreshConfig.enabled,
+      lastRunAt: this.lastRunAt,
+      nextRunAt: this.nextRunAt,
+      storiesProcessed: this.storiesProcessed,
+      commentsRefreshed: this.commentsRefreshed,
+    };
+  }
+
+  /**
+   * 获取带配置的服务状态
+   */
+  async getStatusWithConfig(): Promise<CommentRefreshStatus> {
+    const refreshConfig = getCommentRefreshConfig();
+    return {
+      isRunning: this.isRunning,
+      enabled: refreshConfig.enabled,
+      lastRunAt: this.lastRunAt,
+      nextRunAt: this.nextRunAt,
+      storiesProcessed: this.storiesProcessed,
+      commentsRefreshed: this.commentsRefreshed,
+      currentInterval: refreshConfig.interval,
+      currentStoryLimit: refreshConfig.storyLimit,
+      currentBatchSize: refreshConfig.batchSize,
+    };
+  }
+}
+
+// 评论刷新服务单例
+let commentRefreshInstance: CommentRefreshService | null = null;
+
+/**
+ * 获取评论刷新服务单例
+ */
+export function getCommentRefreshService(): CommentRefreshService {
+  if (!commentRefreshInstance) {
+    commentRefreshInstance = new CommentRefreshService();
+  }
+  return commentRefreshInstance;
 }
