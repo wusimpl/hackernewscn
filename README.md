@@ -43,8 +43,8 @@ cp backend/.env.example backend/.env
 
 2. 配置环境变量 (backend/.env):
 ```env
-OPENAI_API_KEY=your-api-key
-OPENAI_BASE_URL=https://api.openai.com/v1
+LLM_API_KEY=your-api-key
+LLM_BASE_URL=https://api.openai.com/v1
 LLM_MODEL=gpt-3.5-turbo
 ADMIN_TOKEN=your-admin-token
 PORT=3000

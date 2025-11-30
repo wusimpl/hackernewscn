@@ -12,9 +12,9 @@ export const config = {
 
   // LLM 配置
   llm: {
-    apiKey: process.env.OPENAI_API_KEY || '',
-    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    model: process.env.LLM_MODEL || 'gpt-3.5-turbo',
+    apiKey: process.env.LLM_API_KEY || '',
+    baseUrl: process.env.LLM_BASE_URL || '',
+    model: process.env.LLM_MODEL || '',
   },
 
   // 任务队列配置
@@ -64,7 +64,7 @@ export function reloadSchedulerConfig(): void {
 
 // 验证必需的环境变量
 if (!config.llm.apiKey) {
-  console.warn('警告: OPENAI_API_KEY 未设置');
+  console.warn('警告: LLM_API_KEY 未设置');
 }
 
 if (!config.adminToken && config.isDevelopment) {

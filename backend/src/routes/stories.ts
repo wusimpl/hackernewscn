@@ -7,7 +7,8 @@ import {
   SettingsRepository, 
   TitleTranslationRepository, 
   SchedulerStatusRepository,
-  ArticleTranslationRepository
+  ArticleTranslationRepository,
+  StoryRepository
 } from '../db/repositories';
 import { StoryWithTranslation, ApiResponse, Story } from '../types';
 import { getSchedulerService } from '../services/scheduler';
@@ -90,6 +91,11 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const schedulerStatusRepo = new SchedulerStatusRepository();
     const schedulerStatus = await schedulerStatusRepo.getStatus();
 
+    // 从数据库获取存储的故事快照（score, descendants 等）
+    const storyRepo = new StoryRepository();
+    const storedStories = await storyRepo.findByIds(storyIds);
+    const storySnapshotMap = new Map(storedStories.map(s => [s.story_id, s]));
+
     // 构建返回结果 - 只返回标题和文章都翻译完成的故事
     const storiesWithTranslation: StoryWithTranslation[] = [];
     let blockedCount = 0;
@@ -117,14 +123,16 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         continue;
       }
 
+      // 优先使用数据库快照的 score 和 descendants
+      const snapshot = storySnapshotMap.get(story.id);
       storiesWithTranslation.push({
         id: story.id,
         title: story.title,
         by: story.by,
-        score: story.score,
+        score: snapshot?.score ?? story.score,
         time: story.time,
         url: story.url,
-        descendants: story.descendants,
+        descendants: snapshot?.descendants ?? story.descendants,
         translatedTitle,
         isTranslating: false,
         hasTranslatedArticle: hasTranslatedArticle,

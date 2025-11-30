@@ -5,6 +5,8 @@ import { ReaderModal } from './components/ReaderModal';
 import { NotificationToast } from './components/NotificationToast';
 import { ErrorToast } from './components/ErrorToast';
 import { TranslatingToast } from './components/TranslatingToast';
+import { FavoritesModal } from './components/FavoritesModal';
+import { getFavorites, FavoriteItem } from './services/favoritesService';
 import { fetchStories, fetchMoreStories } from './services/hnService';
 import { getArticleCache, getArticle } from './services/cacheService';
 import { Story, LoadingState, CachedArticle } from './types';
@@ -65,6 +67,20 @@ const App: React.FC = () => {
 
   // SSE connection ref
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Favorites State
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
+  const [openedFromFavorites, setOpenedFromFavorites] = useState(false);
+
+  // Load favorites
+  const loadFavorites = () => {
+    setFavorites(getFavorites());
+  };
+
+  useEffect(() => {
+    loadFavorites();
+  }, []);
 
   // Load Saved Data
   useEffect(() => {
@@ -509,11 +525,22 @@ const App: React.FC = () => {
       <Header
         isLoading={loadingState === LoadingState.LOADING_STORIES}
         lastUpdatedAt={lastUpdatedAt}
+        favoritesCount={favorites.length}
+        onFavoritesClick={() => {
+          loadFavorites();
+          setFavoritesOpen(true);
+        }}
       />
 
       <ReaderModal
         isOpen={readerOpen}
-        onClose={() => setReaderOpen(false)}
+        onClose={() => {
+          setReaderOpen(false);
+          if (openedFromFavorites) {
+            setOpenedFromFavorites(false);
+            setFavoritesOpen(true);
+          }
+        }}
         title={activeStory?.translatedTitle || activeStory?.title || "Reader"}
         originalUrl={activeStory?.url}
         content={readerContent}
@@ -521,6 +548,20 @@ const App: React.FC = () => {
         statusMessage={readerStatus}
         storyId={activeStory?.id}
         commentCount={activeStory?.descendants}
+        story={activeStory}
+        onFavoriteChange={loadFavorites}
+      />
+
+      <FavoritesModal
+        isOpen={favoritesOpen}
+        onClose={() => setFavoritesOpen(false)}
+        favorites={favorites}
+        onStoryClick={(story) => {
+          setFavoritesOpen(false);
+          setOpenedFromFavorites(true);
+          handleArticleClick(story);
+        }}
+        onFavoritesChange={loadFavorites}
       />
 
       {notification && (
