@@ -118,9 +118,12 @@ router.post('/stream', async (req: Request, res: Response) => {
     }
 
     let buffer = '';
+    // 使用 TextDecoder 正确处理 UTF-8 多字节字符，避免中文乱码
+    const decoder = new TextDecoder('utf-8');
     
     body.on('data', (chunk: Buffer) => {
-      buffer += chunk.toString();
+      // stream: true 确保不完整的多字节字符会被保留到下一个 chunk
+      buffer += decoder.decode(chunk, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
 
