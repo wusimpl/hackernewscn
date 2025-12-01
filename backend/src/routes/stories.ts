@@ -8,7 +8,8 @@ import {
   TitleTranslationRepository, 
   SchedulerStatusRepository,
   ArticleTranslationRepository,
-  StoryRepository
+  StoryRepository,
+  CommentRepository
 } from '../db/repositories';
 import { StoryWithTranslation, ApiResponse, Story } from '../types';
 import { getSchedulerService } from '../services/scheduler';
@@ -96,6 +97,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     const storedStories = await storyRepo.findByIds(storyIds);
     const storySnapshotMap = new Map(storedStories.map(s => [s.story_id, s]));
 
+    // 获取实际的评论数量（数据库中存储的评论数）
+    const commentRepo = new CommentRepository();
+    const commentCountMap = await commentRepo.countByStoryIds(storyIds);
+
     // 构建返回结果 - 只返回标题和文章都翻译完成的故事
     const storiesWithTranslation: StoryWithTranslation[] = [];
     let blockedCount = 0;
@@ -123,8 +128,14 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         continue;
       }
 
-      // 优先使用数据库快照的 score 和 descendants
+      // 优先使用数据库快照的 score，评论数使用实际存储的评论数量
       const snapshot = storySnapshotMap.get(story.id);
+      // 使用实际评论数，如果没有则回退到快照或 API 数据
+      const actualCommentCount = commentCountMap.get(story.id);
+      const descendants = actualCommentCount !== undefined 
+        ? actualCommentCount 
+        : (snapshot?.descendants ?? story.descendants);
+      
       storiesWithTranslation.push({
         id: story.id,
         title: story.title,
@@ -132,7 +143,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         score: snapshot?.score ?? story.score,
         time: story.time,
         url: story.url,
-        descendants: snapshot?.descendants ?? story.descendants,
+        descendants,
         translatedTitle,
         isTranslating: false,
         hasTranslatedArticle: hasTranslatedArticle,

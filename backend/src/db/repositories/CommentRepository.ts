@@ -77,6 +77,26 @@ export class CommentRepository {
     return result[0].values[0][0] as number;
   }
 
+  // 批量获取多个故事的评论数量
+  async countByStoryIds(storyIds: number[]): Promise<Map<number, number>> {
+    if (storyIds.length === 0) return new Map();
+
+    const db = await getDatabase();
+    const placeholders = storyIds.map(() => '?').join(',');
+    const result = db.exec(
+      `SELECT story_id, COUNT(*) as count FROM comments WHERE story_id IN (${placeholders}) GROUP BY story_id`,
+      storyIds
+    );
+
+    const countMap = new Map<number, number>();
+    if (result.length > 0) {
+      for (const row of result[0].values) {
+        countMap.set(row[0] as number, row[1] as number);
+      }
+    }
+    return countMap;
+  }
+
   // Helper method to map database row to CommentRecord
   private mapRowToComment(columns: string[], row: any[]): CommentRecord {
     const obj: any = {};
