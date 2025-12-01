@@ -33,7 +33,22 @@ export const ArticleChat: React.FC<ArticleChatProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+
+  // 检测用户是否在底部附近（阈值100px）
+  const checkIfNearBottom = () => {
+    const container = messagesContainerRef.current;
+    if (!container) return true;
+    const threshold = 100;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+  };
+
+  // 处理滚动事件，判断是否应该自动滚动
+  const handleScroll = () => {
+    setShouldAutoScroll(checkIfNearBottom());
+  };
 
   // 加载历史记录
   useEffect(() => {
@@ -46,13 +61,16 @@ export const ArticleChat: React.FC<ArticleChatProps> = ({
       }
       setStreamingContent('');
       setInput('');
+      setShouldAutoScroll(true); // 重新打开时重置自动滚动
     }
   }, [isOpen, storyId]);
 
-  // 自动滚动到底部
+  // 自动滚动到底部（仅当用户在底部附近时）
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent]);
+    if (shouldAutoScroll) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, streamingContent, shouldAutoScroll]);
 
   // 聚焦输入框
   useEffect(() => {
@@ -160,7 +178,11 @@ export const ArticleChat: React.FC<ArticleChatProps> = ({
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#111]">
+      <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-[#111]"
+      >
         {messages.length === 0 && !streamingContent && (
           <div className="text-center text-[#666] py-8">
             <p className="mb-2">👋 你好！我可以帮你解答关于这篇文章的问题。</p>
