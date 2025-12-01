@@ -63,6 +63,7 @@ export interface ArticleTranslationRecord {
   original_url: string;
   status: ArticleStatus;
   error_message?: string;
+  tldr?: string;
   updated_at?: number;
 }
 
@@ -83,6 +84,7 @@ export interface CachedArticle {
   content: string;
   originalUrl?: string;
   timestamp: number;
+  tldr?: string;
 }
 
 export interface PromptResponseData {

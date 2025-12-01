@@ -42,6 +42,7 @@ export interface ArticleTranslation {
   original_url: string;
   status: ArticleStatus;
   error_message?: string;
+  tldr?: string;
   updated_at: number;
 }
 
@@ -109,6 +110,7 @@ export interface SSEArticleEvent extends SSEEventBase {
   title?: string;
   content?: string;
   originalUrl?: string;
+  tldr?: string;
   error?: string;
   errorMessage?: string;
   // 完整的 story 信息，用于前端合并到列表

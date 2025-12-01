@@ -61,6 +61,7 @@ const App: React.FC = () => {
   const [readerOpen, setReaderOpen] = useState(false);
   const [activeStory, setActiveStory] = useState<Story | null>(null);
   const [readerContent, setReaderContent] = useState<string>("");
+  const [readerTldr, setReaderTldr] = useState<string>("");
   const [readerStatus, setReaderStatus] = useState<string>("");
   const [readerLoading, setReaderLoading] = useState(false);
   const [isCacheReady, setIsCacheReady] = useState(false);
@@ -115,7 +116,8 @@ const App: React.FC = () => {
               title: record.title_snapshot,
               content: record.content_markdown,
               originalUrl: record.original_url,
-              timestamp: record.updated_at || Date.now()
+              timestamp: record.updated_at || Date.now(),
+              tldr: record.tldr
             };
           });
         setArticleCache(cacheMap);
@@ -208,7 +210,7 @@ const App: React.FC = () => {
             if (data.type === 'article.done') {
               // console.log('[SSE] 收到文章翻译完成事件:', data);
               
-              const { storyId, title, content, originalUrl, story: newStory } = data;
+              const { storyId, title, content, originalUrl, tldr, story: newStory } = data;
               
               // 更新缓存
               const newCacheItem: CachedArticle = {
@@ -216,7 +218,8 @@ const App: React.FC = () => {
                 title: title,
                 content: content,
                 originalUrl: originalUrl,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                tldr: tldr
               };
               
               setArticleCache(prev => ({
@@ -267,6 +270,7 @@ const App: React.FC = () => {
               setActiveStory(prev => {
                 if (prev && prev.id === storyId) {
                   setReaderContent(content);
+                  setReaderTldr(tldr || '');
                   setReaderLoading(false);
                 }
                 return prev;
@@ -403,7 +407,7 @@ const App: React.FC = () => {
 
     // Step 1: Check local cache first - display immediately if available
     if (articleCache[story.id]) {
-      openReader(story, articleCache[story.id].content);
+      openReader(story, articleCache[story.id].content, articleCache[story.id].tldr);
       return;
     }
 
@@ -423,10 +427,12 @@ const App: React.FC = () => {
             title: article.title_snapshot,
             content: article.content_markdown,
             originalUrl: article.original_url,
-            timestamp: article.updated_at || Date.now()
+            timestamp: article.updated_at || Date.now(),
+            tldr: article.tldr
           };
           setArticleCache(prev => ({ ...prev, [story.id]: newCacheItem }));
           setReaderContent(article.content_markdown);
+          setReaderTldr(article.tldr || '');
           setReaderLoading(false);
           return;
         }
@@ -450,16 +456,18 @@ const App: React.FC = () => {
   };
 
   // 3. Open Reader
-  const openReader = (story: Story, content?: string) => {
+  const openReader = (story: Story, content?: string, tldr?: string) => {
     setActiveStory(story);
     setReaderOpen(true);
 
     if (content) {
       setReaderContent(content);
+      setReaderTldr(tldr || '');
       setReaderLoading(false);
     } else if (articleCache[story.id]) {
       // Fallback check
       setReaderContent(articleCache[story.id].content);
+      setReaderTldr(articleCache[story.id].tldr || '');
       setReaderLoading(false);
     } else {
       // Fallback for direct read (shouldn't really happen in this new flow, but safe to keep)
@@ -487,7 +495,7 @@ const App: React.FC = () => {
           type: 'story',
           isTranslating: false
         };
-        openReader(storyObj, cachedItem.content);
+        openReader(storyObj, cachedItem.content, cachedItem.tldr);
       }
       setNotification(null);
     }
@@ -544,6 +552,7 @@ const App: React.FC = () => {
         title={activeStory?.translatedTitle || activeStory?.title || "Reader"}
         originalUrl={activeStory?.url}
         content={readerContent}
+        tldr={readerTldr}
         isLoading={readerLoading}
         statusMessage={readerStatus}
         storyId={activeStory?.id}

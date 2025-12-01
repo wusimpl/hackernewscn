@@ -204,16 +204,18 @@ export const translateTitlesBatch = async (
  * 翻译完整的 Markdown 文章
  * @param markdownContent 原始 Markdown 内容
  * @param customPrompt 自定义提示词(可选)
+ * @param storyId 文章ID(可选，用于日志)
  * @returns 翻译后的 Markdown 内容
  */
 export const translateArticle = async (
   markdownContent: string,
-  customPrompt: string = DEFAULT_PROMPT
+  customPrompt: string = DEFAULT_PROMPT,
+  storyId?: number
 ): Promise<string> => {
   if (!markdownContent) return "";
 
   const startTime = Date.now();
-  console.log(`  [LLM Service] 准备翻译文章, 内容长度: ${markdownContent.length}字符`);
+  console.log(`  [LLM Service] 准备翻译文章, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.length}字符`);
 
   // 精简版提示词
   const systemPrompt = `
@@ -280,6 +282,47 @@ export const translateArticle = async (
   console.log(`  [LLM Service] API调用耗时: ${apiDuration}秒, 总耗时: ${totalDuration}秒`);
 
   return content || "Translation generation failed.";
+};
+
+/**
+ * 生成文章 TLDR 摘要
+ * @param markdownContent 原始 Markdown 内容（英文）
+ * @param storyId 文章ID(可选，用于日志)
+ * @returns 中文 TLDR 摘要
+ */
+export const generateTLDR = async (
+  markdownContent: string,
+  storyId?: number
+): Promise<string> => {
+  if (!markdownContent) return "";
+
+  const startTime = Date.now();
+  console.log(`  [LLM Service] 准备生成TLDR, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.length}字符`);
+
+  const systemPrompt = `你是一个专业的文章摘要助手。请根据用户提供的英文文章内容，生成一个简洁的中文摘要（TLDR）。
+
+要求：
+1. 摘要必须用简体中文撰写
+2. 控制在 2-4 句话，100-200 字以内
+3. 提炼文章的核心观点和关键信息
+4. 语言要通俗易懂，避免过于学术化
+5. 如果文章涉及技术概念，用简单的语言解释
+6. 直接输出摘要内容，不要加任何前缀如"摘要："或"TLDR："
+
+输出格式示例：
+这篇文章讨论了 AI 在软件开发中的应用。作者认为，虽然 AI 工具能提高编码效率，但开发者仍需保持批判性思维。文章还提到了几个实际案例，展示了 AI 辅助编程的优势和局限性。`;
+
+  const apiStartTime = Date.now();
+  const content = await callLLM([
+    { role: "system", content: systemPrompt },
+    { role: "user", content: markdownContent }
+  ], false);
+  const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(2);
+
+  const totalDuration = ((Date.now() - startTime) / 1000).toFixed(2);
+  console.log(`  [LLM Service] TLDR生成完成, storyId: ${storyId ?? 'unknown'}, API调用耗时: ${apiDuration}秒, 总耗时: ${totalDuration}秒`);
+
+  return content || "";
 };
 
 interface CommentTranslationResult {

@@ -8,7 +8,7 @@ import {
   deleteArticleTranslation,
   clearAllArticleTranslations
 } from '../services/cache';
-import { translateArticle, DEFAULT_PROMPT } from '../services/llm';
+import { translateArticle, generateTLDR, DEFAULT_PROMPT } from '../services/llm';
 import { getQueueService } from '../services/queue';
 import { StoryRepository, SettingsRepository, TitleTranslationRepository } from '../db/repositories';
 import { ApiResponse, ArticleStatus } from '../types';
@@ -26,6 +26,7 @@ interface ArticleResponse {
   content?: string;
   originalUrl?: string;
   translatedAt?: number;
+  tldr?: string;
 }
 
 /**
@@ -62,7 +63,8 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
       status: article.status,
       content: article.status === 'done' ? article.content_markdown : undefined,
       originalUrl: article.original_url,
-      translatedAt: article.status === 'done' ? article.updated_at : undefined
+      translatedAt: article.status === 'done' ? article.updated_at : undefined,
+      tldr: article.status === 'done' ? article.tldr : undefined
     };
 
     res.json({
@@ -188,12 +190,17 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
           throw new Error('Content empty');
         }
 
-        // Translate article
-        console.log(`  [步骤2] 开始翻译...`);
+        // Translate article and generate TLDR in parallel
+        console.log(`  [步骤2] 开始翻译和生成TLDR（并行）...`);
         const translateStartTime = Date.now();
-        const translatedMarkdown = await translateArticle(markdown, customPrompt);
+        
+        const [translatedMarkdown, tldr] = await Promise.all([
+          translateArticle(markdown, customPrompt, storyId),
+          generateTLDR(markdown, storyId)
+        ]);
+        
         const translateDuration = ((Date.now() - translateStartTime) / 1000).toFixed(2);
-        console.log(`  [步骤2完成] 耗时: ${translateDuration}秒`);
+        console.log(`  [步骤2完成] 翻译和TLDR生成耗时: ${translateDuration}秒`);
 
         // Save result
         await setArticleTranslation({
@@ -201,7 +208,8 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
           title_snapshot: titleSnapshot,
           content_markdown: translatedMarkdown,
           original_url: story.url!,
-          status: 'done'
+          status: 'done',
+          tldr: tldr || undefined
         });
 
         const totalDuration = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -214,6 +222,7 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
           title: titleSnapshot,
           content: translatedMarkdown,
           originalUrl: story.url,
+          tldr: tldr || undefined,
           story: {
             id: storyId,
             title: story.title_en,

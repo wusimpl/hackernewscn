@@ -1,7 +1,7 @@
 import fetch from 'node-fetch';
 import { config, reloadCommentRefreshConfig } from '../config';
 import { refreshTopStories, saveStoryToDatabase, fetchStoryComments, fetchStoryDetails } from './hn';
-import { translateTitlesBatch, translateArticle, translateCommentsBatch, DEFAULT_PROMPT } from './llm';
+import { translateTitlesBatch, translateArticle, translateCommentsBatch, generateTLDR, DEFAULT_PROMPT } from './llm';
 import { getQueueService } from './queue';
 import { hashPrompt, setArticleTranslation, getArticleTranslation } from './cache';
 import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository, StoryRepository } from '../db/repositories';
@@ -457,8 +457,11 @@ export class SchedulerService {
         return false;
       }
 
-      // Translate article content
-      const translatedMarkdown = await translateArticle(markdown, customPrompt);
+      // Translate article content and generate TLDR in parallel
+      const [translatedMarkdown, tldr] = await Promise.all([
+        translateArticle(markdown, customPrompt, story.id),
+        generateTLDR(markdown, story.id)
+      ]);
 
       if (!translatedMarkdown) {
         console.error(`[Scheduler] Article ${story.id} translation returned empty`);
@@ -471,7 +474,8 @@ export class SchedulerService {
         title_snapshot: titleSnapshot,
         content_markdown: translatedMarkdown,
         original_url: story.url!,
-        status: 'done'
+        status: 'done',
+        tldr: tldr || undefined
       });
 
       // 文章翻译完成后，保存故事到数据库
@@ -490,6 +494,7 @@ export class SchedulerService {
         title: titleSnapshot,
         content: translatedMarkdown,
         originalUrl: story.url,
+        tldr: tldr || undefined,
         story: {
           id: story.id,
           title: story.title,

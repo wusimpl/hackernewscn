@@ -41,6 +41,7 @@ CREATE TABLE IF NOT EXISTS article_translations (
   original_url TEXT NOT NULL,
   status TEXT NOT NULL CHECK(status IN ('queued', 'running', 'done', 'error', 'blocked')),
   error_message TEXT,
+  tldr TEXT,
   updated_at INTEGER NOT NULL,
   FOREIGN KEY (story_id) REFERENCES stories(story_id) ON DELETE CASCADE
 );

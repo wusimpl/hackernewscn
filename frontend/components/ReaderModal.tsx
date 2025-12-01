@@ -55,6 +55,7 @@ interface ReaderModalProps {
   onClose: () => void;
   title: string;
   content: string;
+  tldr?: string;
   originalUrl?: string;
   isLoading: boolean;
   statusMessage: string;
@@ -69,6 +70,7 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
   onClose, 
   title, 
   content, 
+  tldr,
   originalUrl,
   isLoading,
   statusMessage,
@@ -273,6 +275,19 @@ export const ReaderModal: React.FC<ReaderModalProps> = ({
               </div>
             ) : (
               <div className="max-w-2xl mx-auto px-5 py-8 sm:px-8">
+                {/* TLDR 摘要框 */}
+                {tldr && (
+                  <div className="mb-6 p-4 bg-[#1a1a1a] border border-[#ff6600]/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-[#ff6600]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span className="text-[#ff6600] text-sm font-medium">TL;DR</span>
+                    </div>
+                    <p className="text-[#c0c0c0] text-sm leading-relaxed">{tldr}</p>
+                  </div>
+                )}
+                
                 <article className="prose prose-invert prose-sm sm:prose-base max-w-none 
                   prose-a:text-[#ff6600] prose-a:no-underline hover:prose-a:underline
                   prose-headings:text-[#dcdcdc] prose-headings:font-bold

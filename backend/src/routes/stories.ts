@@ -262,7 +262,7 @@ async function triggerTranslationForStories(stories: StoryWithRank[], promptHash
         return false;
       }
 
-      const translatedMarkdown = await translateArticle(markdown, customPrompt);
+      const translatedMarkdown = await translateArticle(markdown, customPrompt, story.id);
       if (!translatedMarkdown) {
         return false;
       }

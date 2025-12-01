@@ -8,14 +8,15 @@ export class ArticleTranslationRepository {
     const now = Math.floor(Date.now() / 1000);
 
     db.run(
-      `INSERT INTO article_translations (story_id, title_snapshot, content_markdown, original_url, status, error_message, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO article_translations (story_id, title_snapshot, content_markdown, original_url, status, error_message, tldr, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(story_id) DO UPDATE SET
          title_snapshot = excluded.title_snapshot,
          content_markdown = excluded.content_markdown,
          original_url = excluded.original_url,
          status = excluded.status,
          error_message = excluded.error_message,
+         tldr = excluded.tldr,
          updated_at = excluded.updated_at`,
       [
         translation.story_id,
@@ -24,6 +25,7 @@ export class ArticleTranslationRepository {
         translation.original_url,
         translation.status,
         translation.error_message || null,
+        translation.tldr || null,
         now,
       ]
     );
@@ -158,6 +160,7 @@ export class ArticleTranslationRepository {
       original_url: obj.original_url,
       status: obj.status as ArticleStatus,
       error_message: obj.error_message,
+      tldr: obj.tldr,
       updated_at: obj.updated_at,
     };
   }
