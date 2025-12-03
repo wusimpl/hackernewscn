@@ -1,0 +1,19 @@
+{
+  "default_provider": "Deepseek V3",
+  "providers": [
+    {
+      "name": "Deepseek V3",
+      "api_base": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat",
+      "api_key": "your-api-key-here",
+      "description": "介绍"
+    },
+    {
+      "name": "OpenAI GPT-4",
+      "api_base": "https://api.openai.com/v1",
+      "model": "gpt-4o",
+      "api_key": "your-openai-key-here",
+      "description": "介绍"
+    }
+  ]
+}

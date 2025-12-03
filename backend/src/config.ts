@@ -82,10 +82,6 @@ export function reloadCommentRefreshConfig(): void {
 }
 
 // 验证必需的环境变量
-if (!config.llm.apiKey) {
-  console.warn('警告: LLM_API_KEY 未设置');
-}
-
 if (!config.adminToken && config.isDevelopment) {
   console.warn('警告: ADMIN_TOKEN 未设置');
 }

@@ -1,5 +1,7 @@
 import fetch from 'node-fetch';
 import { config } from '../config';
+import { getCurrentProvider } from './llmConfig';
+import { LLMProvider } from '../types';
 
 // 默认提示词(与前端保持一致)
 export const DEFAULT_PROMPT = `将英文文本重写成通俗流畅、引人入胜的简体中文。
@@ -30,6 +32,32 @@ interface TranslationResult {
 }
 
 /**
+ * 获取当前 LLM 配置（优先使用 JSON 配置，回退到 .env）
+ */
+function getLLMSettings(): { apiKey: string; baseUrl: string; model: string } | null {
+  // 优先从 JSON 配置获取
+  const provider = getCurrentProvider();
+  if (provider && provider.api_key) {
+    return {
+      apiKey: provider.api_key,
+      baseUrl: provider.api_base,
+      model: provider.model
+    };
+  }
+  
+  // 回退到 .env 配置
+  if (config.llm.apiKey) {
+    return {
+      apiKey: config.llm.apiKey,
+      baseUrl: config.llm.baseUrl,
+      model: config.llm.model
+    };
+  }
+  
+  return null;
+}
+
+/**
  * 调用 OpenAI 兼容的 Chat Completions API
  * @param messages 消息数组
  * @param jsonMode 是否启用 JSON 模式
@@ -41,8 +69,10 @@ async function callLLM(
   jsonMode: boolean = false,
   retries: number = 3
 ): Promise<string | null> {
-  if (!config.llm.apiKey) {
-    console.warn('[LLM Service] No API Key configured');
+  const llmSettings = getLLMSettings();
+  
+  if (!llmSettings) {
+    console.warn('[LLM Service] No LLM provider configured');
     return null;
   }
 
@@ -52,11 +82,11 @@ async function callLLM(
     try {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.llm.apiKey}`
+        'Authorization': `Bearer ${llmSettings.apiKey}`
       };
 
       const body: any = {
-        model: config.llm.model,
+        model: llmSettings.model,
         messages: messages,
         temperature: 0.3, // 较低温度以获得更确定性的翻译
       };
@@ -65,7 +95,7 @@ async function callLLM(
         body.response_format = { type: "json_object" };
       }
 
-      const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
+      const response = await fetch(`${llmSettings.baseUrl}/chat/completions`, {
         method: 'POST',
         headers,
         body: JSON.stringify(body)

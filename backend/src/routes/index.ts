@@ -7,6 +7,7 @@ import eventsRouter from './events';
 import adminRouter from './admin';
 import commentsRouter from './comments';
 import chatRouter from './chat';
+import llmProvidersRouter from './llm-providers';
 
 const router = Router();
 
@@ -19,5 +20,6 @@ router.use('/events', eventsRouter);
 router.use('/admin', adminRouter);
 router.use('/comments', commentsRouter);
 router.use('/chat', chatRouter);
+router.use('/llm-providers', llmProvidersRouter);
 
 export default router;

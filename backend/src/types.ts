@@ -158,3 +158,18 @@ export interface CommentTreeNode {
   dead: boolean;
   children: CommentTreeNode[];
 }
+
+// LLM Provider 配置
+export interface LLMProvider {
+  name: string;
+  api_base: string;
+  model: string;
+  api_key: string;
+  description?: string;
+}
+
+// LLM 配置文件结构
+export interface LLMConfig {
+  default_provider: string;
+  providers: LLMProvider[];
+}

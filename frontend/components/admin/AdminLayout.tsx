@@ -4,10 +4,11 @@ import { AdminLogin } from './AdminLogin';
 import { DashboardTab } from './DashboardTab';
 import { SettingsTab } from './SettingsTab';
 import { CommentRefreshTab } from './CommentRefreshTab';
+import { LLMProvidersTab } from './LLMProvidersTab';
 import { PromptTab } from './PromptTab';
 import { CacheTab } from './CacheTab';
 
-export type AdminTab = 'dashboard' | 'settings' | 'comment-refresh' | 'prompt' | 'cache';
+export type AdminTab = 'dashboard' | 'settings' | 'comment-refresh' | 'llm-providers' | 'prompt' | 'cache';
 
 interface SchedulerStatus {
   isRunning: boolean;
@@ -173,6 +174,14 @@ export const AdminLayout: React.FC = () => {
       case 'comment-refresh':
         return (
           <CommentRefreshTab
+            password={password}
+            onMessage={showMessage}
+            onError={showError}
+          />
+        );
+      case 'llm-providers':
+        return (
+          <LLMProvidersTab
             password={password}
             onMessage={showMessage}
             onError={showError}
