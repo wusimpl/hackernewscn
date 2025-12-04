@@ -61,13 +61,7 @@ export class CleanupService {
 
     console.log(`[Cleanup] 启动服务: interval=${CLEANUP_CONFIG.interval / 1000 / 60 / 60}h`);
 
-    // 启动后延迟1分钟执行首次检查
-    setTimeout(() => {
-      this.runOnce().catch(err => {
-        console.error('[Cleanup] 首次运行失败:', err);
-      });
-    }, 60000);
-
+    // 不立即执行清理，等待下一次定时检查
     this.nextRunAt = Date.now() + CLEANUP_CONFIG.interval;
 
     this.intervalId = setInterval(() => {
