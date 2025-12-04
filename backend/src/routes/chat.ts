@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import fetch from 'node-fetch';
-import { getLLMConfig } from '../services/llmConfig';
+import { getCurrentProvider } from '../services/llmConfig';
 
 const router = Router();
 
@@ -61,8 +61,8 @@ router.post('/stream', async (req: Request, res: Response) => {
     return;
   }
 
-  // 获取 LLM 配置
-  const llmConfig = await getLLMConfig();
+  // 获取当前 LLM Provider
+  const llmConfig = getCurrentProvider();
   if (!llmConfig) {
     res.status(500).json({
       success: false,
@@ -87,11 +87,11 @@ router.post('/stream', async (req: Request, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const response = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
+    const response = await fetch(`${llmConfig.api_base}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${llmConfig.apiKey}`
+        'Authorization': `Bearer ${llmConfig.api_key}`
       },
       body: JSON.stringify({
         model: llmConfig.model,
