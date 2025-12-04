@@ -11,7 +11,6 @@ interface Props {
 const tabs: { id: AdminTab; icon: string; label: string }[] = [
   { id: 'dashboard', icon: '📊', label: '概览' },
   { id: 'settings', icon: '⚙️', label: '调度配置' },
-  { id: 'comment-refresh', icon: '💬', label: '评论刷新' },
   { id: 'llm-providers', icon: '🤖', label: '大模型配置' },
   { id: 'prompt', icon: '📝', label: '提示词' },
   { id: 'cache', icon: '💾', label: '缓存管理' },

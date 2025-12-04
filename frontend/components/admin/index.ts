@@ -6,4 +6,3 @@ export { SettingsTab } from './SettingsTab';
 export { LLMProvidersTab } from './LLMProvidersTab';
 export { PromptTab } from './PromptTab';
 export { CacheTab } from './CacheTab';
-export { CommentRefreshTab } from './CommentRefreshTab';

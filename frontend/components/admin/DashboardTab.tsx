@@ -8,6 +8,15 @@ interface SchedulerStatus {
   titlesTranslated: number;
 }
 
+interface CommentRefreshStatus {
+  isRunning: boolean;
+  enabled: boolean;
+  lastRunAt: number | null;
+  nextRunAt: number | null;
+  storiesProcessed: number;
+  commentsRefreshed: number;
+}
+
 interface Stats {
   stories: { total: number };
   titles: { translated: number };
@@ -34,11 +43,13 @@ interface Props {
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
 
+
 export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onMessage, onError }) => {
   const [triggering, setTriggering] = useState(false);
   const [triggeringComments, setTriggeringComments] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [commentStatus, setCommentStatus] = useState<CommentRefreshStatus | null>(null);
 
   const fetchStats = async () => {
     try {
@@ -54,8 +65,23 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
     }
   };
 
+  const fetchCommentStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/admin/comment-refresh/status`, {
+        headers: { Authorization: `Bearer ${password}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommentStatus(data.data);
+      }
+    } catch {
+      // 静默失败
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchCommentStatus();
   }, [password]);
 
   useEffect(() => {
@@ -63,6 +89,7 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
     const interval = setInterval(() => {
       onRefresh();
       fetchStats();
+      fetchCommentStatus();
     }, 30000);
     return () => clearInterval(interval);
   }, [autoRefresh, onRefresh]);
@@ -94,6 +121,7 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
   const handleRefresh = () => {
     onRefresh();
     fetchStats();
+    fetchCommentStatus();
   };
 
   const handleTriggerComments = async () => {
@@ -108,6 +136,7 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
         setTimeout(() => {
           onRefresh();
           fetchStats();
+          fetchCommentStatus();
         }, 3000);
       } else {
         const data = await res.json();
@@ -125,6 +154,7 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
     return new Date(ts).toLocaleString('zh-CN');
   };
 
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -140,67 +170,95 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
         </label>
       </div>
 
-      {/* Status Cards - Row 1 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        {/* Running Status */}
+      {/* 服务状态 */}
+      <div className="space-y-3 mb-6">
+        {/* 文章调度器状态 */}
         <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
-          <div className="text-[#666] text-xs mb-2">运行状态</div>
-          <div className="flex items-center gap-2">
-            <span className={`w-2 h-2 rounded-full ${
-              status?.isRunning 
-                ? 'bg-green-500 animate-pulse' 
-                : 'bg-red-500'
-            }`} />
-            <span className={status?.isRunning ? 'text-green-400' : 'text-red-400'}>
-              {status?.isRunning ? '运行中' : '已停止'}
-            </span>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[#828282]">📰</span>
+            <span className="text-[#dcdcdc] font-medium">文章调度器</span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <div className="text-[#666] text-xs mb-1">运行状态</div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${status?.isRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className={status?.isRunning ? 'text-green-400' : 'text-red-400'}>
+                  {status?.isRunning ? '运行中' : '已停止'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[#666] text-xs mb-1">上次抓取时间</div>
+              <div className="text-[#dcdcdc]">{formatTime(status?.lastRunAt ?? null)}</div>
+            </div>
+            <div>
+              <div className="text-[#666] text-xs mb-1">下次抓取时间</div>
+              <div className="text-[#dcdcdc]">{formatTime(status?.nextRunAt ?? null)}</div>
+            </div>
+            <div>
+              <div className="text-[#666] text-xs mb-1">上次抓取</div>
+              <div className="text-[#dcdcdc]">
+                <span className="text-[#ff6600]">{status?.storiesFetched ?? 0}</span> 条
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Last Run */}
+        {/* 评论刷新状态 */}
         <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
-          <div className="text-[#666] text-xs mb-2">上次抓取时间</div>
-          <div className="text-[#dcdcdc] text-sm">
-            {status ? formatTime(status.lastRunAt) : '-'}
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-[#828282]">💬</span>
+            <span className="text-[#dcdcdc] font-medium">评论刷新</span>
+            {commentStatus && !commentStatus.enabled && (
+              <span className="text-xs text-[#666] bg-[#1a1a1a] px-2 py-0.5 rounded">已禁用</span>
+            )}
           </div>
-        </div>
-
-        {/* Next Run */}
-        <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
-          <div className="text-[#666] text-xs mb-2">下次抓取时间</div>
-          <div className="text-[#dcdcdc] text-sm">
-            {status ? formatTime(status.nextRunAt) : '-'}
-          </div>
-        </div>
-
-        {/* Last Fetched */}
-        <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
-          <div className="text-[#666] text-xs mb-2">上次抓取</div>
-          <div className="text-[#dcdcdc] text-sm">
-            <span className="text-[#ff6600]">{status?.storiesFetched ?? 0}</span> 条
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <div className="text-[#666] text-xs mb-1">运行状态</div>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${commentStatus?.isRunning ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
+                <span className={commentStatus?.isRunning ? 'text-green-400' : 'text-red-400'}>
+                  {commentStatus?.isRunning ? '运行中' : '已停止'}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div className="text-[#666] text-xs mb-1">上次刷新时间</div>
+              <div className="text-[#dcdcdc]">{formatTime(commentStatus?.lastRunAt ?? null)}</div>
+            </div>
+            <div>
+              <div className="text-[#666] text-xs mb-1">下次刷新时间</div>
+              <div className="text-[#dcdcdc]">{formatTime(commentStatus?.nextRunAt ?? null)}</div>
+            </div>
+            <div>
+              <div className="text-[#666] text-xs mb-1">上次刷新</div>
+              <div className="text-[#dcdcdc]">
+                <span className="text-[#ff6600]">{commentStatus?.storiesProcessed ?? 0}</span> 篇 / <span className="text-[#ff6600]">{commentStatus?.commentsRefreshed ?? 0}</span> 条
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Stats Cards - Row 2 */}
+
+      {/* 统计数据 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {/* Stories Total */}
         <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
           <div className="text-[#666] text-xs mb-2">故事总数</div>
           <div className="text-[#dcdcdc] text-2xl font-bold">
-            {stats?.stories.total ?? '-'}
+            {stats?.stories.total.toLocaleString() ?? '-'}
           </div>
         </div>
 
-        {/* Titles Translated */}
         <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
           <div className="text-[#666] text-xs mb-2">标题翻译</div>
           <div className="text-[#dcdcdc] text-2xl font-bold">
-            {stats?.titles.translated ?? '-'}
+            {stats?.titles.translated.toLocaleString() ?? '-'}
           </div>
         </div>
 
-        {/* Articles */}
         <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
           <div className="text-[#666] text-xs mb-2">文章翻译</div>
           {stats ? (
@@ -217,27 +275,12 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
                   <span className="text-[#666]">被阻止</span>
                 </div>
               )}
-              {stats.articles.error > 0 && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-red-400">✗</span>
-                  <span className="text-[#dcdcdc]">{stats.articles.error}</span>
-                  <span className="text-[#666]">失败</span>
-                </div>
-              )}
-              {(stats.articles.running > 0 || stats.articles.queued > 0) && (
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="text-blue-400">◐</span>
-                  <span className="text-[#dcdcdc]">{stats.articles.running + stats.articles.queued}</span>
-                  <span className="text-[#666]">进行中</span>
-                </div>
-              )}
             </div>
           ) : (
             <div className="text-[#dcdcdc] text-2xl font-bold">-</div>
           )}
         </div>
 
-        {/* Comments */}
         <div className="bg-[#121212] border border-[#333] rounded-lg p-4">
           <div className="text-[#666] text-xs mb-2">评论</div>
           {stats ? (
@@ -255,7 +298,7 @@ export const DashboardTab: React.FC<Props> = ({ status, password, onRefresh, onM
         </div>
       </div>
 
-      {/* Actions */}
+      {/* 快捷操作 */}
       <div className="bg-[#121212] border border-[#333] rounded-lg p-6">
         <h3 className="text-[#dcdcdc] font-medium mb-4">快捷操作</h3>
         <div className="flex flex-wrap gap-3">
