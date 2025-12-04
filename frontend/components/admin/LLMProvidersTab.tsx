@@ -19,21 +19,213 @@ interface Props {
   onError: (err: string) => void;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+interface ProviderModalProps {
+  isOpen: boolean;
+  editingProvider: LLMProvider | null;
+  onClose: () => void;
+  onSave: (data: {
+    name: string;
+    api_base: string;
+    model: string;
+    api_key: string;
+    description?: string;
+  }) => Promise<void>;
+  onTest: (data: { api_base: string; model: string; api_key: string }) => Promise<void>;
+  saving: boolean;
+  testing: boolean;
+  testResult: { connected: boolean; latency: number; error?: string } | null;
+}
 
-export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError }) => {
-  const [data, setData] = useState<LLMProvidersData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [editingProvider, setEditingProvider] = useState<string | null>(null);
-  
-  // 表单状态
+const ProviderModal: React.FC<ProviderModalProps> = ({
+  isOpen,
+  editingProvider,
+  onClose,
+  onSave,
+  onTest,
+  saving,
+  testing,
+  testResult
+}) => {
   const [formName, setFormName] = useState('');
   const [formApiBase, setFormApiBase] = useState('');
   const [formModel, setFormModel] = useState('');
   const [formApiKey, setFormApiKey] = useState('');
   const [formDescription, setFormDescription] = useState('');
+
+  useEffect(() => {
+    if (editingProvider) {
+      setFormName(editingProvider.name);
+      setFormApiBase(editingProvider.api_base);
+      setFormModel(editingProvider.model);
+      setFormApiKey('');
+      setFormDescription(editingProvider.description || '');
+    } else {
+      setFormName('');
+      setFormApiBase('');
+      setFormModel('');
+      setFormApiKey('');
+      setFormDescription('');
+    }
+  }, [editingProvider, isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = () => {
+    onSave({
+      name: formName,
+      api_base: formApiBase,
+      model: formModel,
+      api_key: formApiKey,
+      description: formDescription || undefined
+    });
+  };
+
+  const handleTest = () => {
+    // 编辑模式下如果没填新key，需要提示
+    if (isEditing && !formApiKey) {
+      alert('测试需要输入 API Key');
+      return;
+    }
+    onTest({
+      api_base: formApiBase,
+      model: formModel,
+      api_key: formApiKey
+    });
+  };
+
+  const isEditing = !!editingProvider;
+  const canTest = formApiBase && formModel && (formApiKey || !isEditing);
+
+  return (
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+      <div 
+        className="bg-[#1a1a1a] border border-[#333] rounded-lg w-full max-w-lg max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 弹窗头部 */}
+        <div className="flex items-center justify-between p-4 border-b border-[#333]">
+          <h3 className="text-[#dcdcdc] font-bold text-lg">
+            {isEditing ? `编辑: ${editingProvider.name}` : '添加新 Provider'}
+          </h3>
+          <button
+            onClick={onClose}
+            className="text-[#828282] hover:text-[#dcdcdc] text-2xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+
+        {/* 表单内容 */}
+        <div className="p-4 space-y-4">
+          <div>
+            <label className="block text-[#828282] text-sm mb-1">名称 *</label>
+            <input
+              type="text"
+              value={formName}
+              onChange={(e) => setFormName(e.target.value)}
+              placeholder="如: Deepseek V3"
+              className="w-full bg-[#121212] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-[#828282] text-sm mb-1">API Base URL *</label>
+            <input
+              type="text"
+              value={formApiBase}
+              onChange={(e) => setFormApiBase(e.target.value)}
+              placeholder="如: https://api.deepseek.com/v1"
+              className="w-full bg-[#121212] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-[#828282] text-sm mb-1">模型名称 *</label>
+            <input
+              type="text"
+              value={formModel}
+              onChange={(e) => setFormModel(e.target.value)}
+              placeholder="如: deepseek-chat"
+              className="w-full bg-[#121212] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-[#828282] text-sm mb-1">
+              API Key * {isEditing && <span className="text-[#666]">(留空则不修改)</span>}
+            </label>
+            <input
+              type="password"
+              value={formApiKey}
+              onChange={(e) => setFormApiKey(e.target.value)}
+              placeholder={isEditing ? '留空则保持原有 Key' : '输入 API Key'}
+              className="w-full bg-[#121212] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-[#828282] text-sm mb-1">描述</label>
+            <input
+              type="text"
+              value={formDescription}
+              onChange={(e) => setFormDescription(e.target.value)}
+              placeholder="如: 速度与质量平衡"
+              className="w-full bg-[#121212] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
+            />
+          </div>
+
+          {/* 测试连通性 */}
+          <div className="pt-2 border-t border-[#333]">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleTest}
+                disabled={testing || !canTest}
+                className="bg-[#242424] text-[#dcdcdc] px-4 py-2 rounded font-medium hover:bg-[#333] transition-colors border border-[#444] disabled:opacity-50 text-sm"
+              >
+                {testing ? '测试中...' : '🔗 测试连通性'}
+              </button>
+              {testResult && (
+                <span className={`text-sm ${testResult.connected ? 'text-green-500' : 'text-red-500'}`}>
+                  {testResult.connected 
+                    ? `✓ 连接成功 (${testResult.latency}ms)` 
+                    : `✗ ${testResult.error || '连接失败'}`}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 弹窗底部按钮 */}
+        <div className="flex justify-end gap-3 p-4 border-t border-[#333]">
+          <button
+            onClick={onClose}
+            className="bg-[#242424] text-[#dcdcdc] px-6 py-2 rounded font-medium hover:bg-[#333] transition-colors border border-[#444]"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving}
+            className="bg-[#ff6600] text-black px-6 py-2 rounded font-bold hover:bg-[#ff8533] transition-colors disabled:opacity-50"
+          >
+            {saving ? '保存中...' : (isEditing ? '更新' : '添加')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+
+export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError }) => {
+  const [data, setData] = useState<LLMProvidersData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingProvider, setEditingProvider] = useState<LLMProvider | null>(null);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ connected: boolean; latency: number; error?: string } | null>(null);
 
   useEffect(() => {
     fetchProviders();
@@ -57,18 +249,79 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
     }
   };
 
-  const resetForm = () => {
-    setFormName('');
-    setFormApiBase('');
-    setFormModel('');
-    setFormApiKey('');
-    setFormDescription('');
-    setShowAddForm(false);
+  const closeModal = () => {
+    setModalOpen(false);
     setEditingProvider(null);
+    setTestResult(null);
   };
 
-  const handleAdd = async () => {
-    if (!formName || !formApiBase || !formModel || !formApiKey) {
+  const openAddModal = () => {
+    setEditingProvider(null);
+    setTestResult(null);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (provider: LLMProvider) => {
+    setEditingProvider(provider);
+    setTestResult(null);
+    setModalOpen(true);
+  };
+
+  const handleSave = async (formData: {
+    name: string;
+    api_base: string;
+    model: string;
+    api_key: string;
+    description?: string;
+  }) => {
+    if (editingProvider) {
+      await handleUpdate(formData);
+    } else {
+      await handleAdd(formData);
+    }
+  };
+
+  const handleTest = async (testData: { api_base: string; model: string; api_key: string }) => {
+    if (!testData.api_base || !testData.model || !testData.api_key) {
+      onError('请填写 API Base、模型名称和 API Key');
+      return;
+    }
+
+    setTesting(true);
+    setTestResult(null);
+
+    try {
+      const res = await fetch(`${API_BASE}/llm-providers/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${password}`
+        },
+        body: JSON.stringify(testData)
+      });
+
+      if (res.ok) {
+        const result = await res.json();
+        setTestResult(result.data);
+      } else {
+        const result = await res.json();
+        onError(result.error?.message || '测试请求失败');
+      }
+    } catch {
+      onError('测试请求失败');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const handleAdd = async (formData: {
+    name: string;
+    api_base: string;
+    model: string;
+    api_key: string;
+    description?: string;
+  }) => {
+    if (!formData.name || !formData.api_base || !formData.model || !formData.api_key) {
       onError('请填写所有必填字段');
       return;
     }
@@ -81,18 +334,12 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
           'Content-Type': 'application/json',
           Authorization: `Bearer ${password}`
         },
-        body: JSON.stringify({
-          name: formName,
-          api_base: formApiBase,
-          model: formModel,
-          api_key: formApiKey,
-          description: formDescription || undefined
-        })
+        body: JSON.stringify(formData)
       });
 
       if (res.ok) {
         onMessage('Provider 已添加');
-        resetForm();
+        closeModal();
         fetchProviders();
       } else {
         const result = await res.json();
@@ -105,15 +352,21 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
     }
   };
 
-  const handleUpdate = async () => {
+  const handleUpdate = async (formData: {
+    name: string;
+    api_base: string;
+    model: string;
+    api_key: string;
+    description?: string;
+  }) => {
     if (!editingProvider) return;
 
     const updates: Record<string, string> = {};
-    if (formName) updates.name = formName;
-    if (formApiBase) updates.api_base = formApiBase;
-    if (formModel) updates.model = formModel;
-    if (formApiKey) updates.api_key = formApiKey;
-    if (formDescription !== undefined) updates.description = formDescription;
+    if (formData.name) updates.name = formData.name;
+    if (formData.api_base) updates.api_base = formData.api_base;
+    if (formData.model) updates.model = formData.model;
+    if (formData.api_key) updates.api_key = formData.api_key;
+    if (formData.description !== undefined) updates.description = formData.description || '';
 
     if (Object.keys(updates).length === 0) {
       onError('请至少修改一个字段');
@@ -122,7 +375,7 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
 
     setSaving(true);
     try {
-      const res = await fetch(`${API_BASE}/llm-providers/${encodeURIComponent(editingProvider)}`, {
+      const res = await fetch(`${API_BASE}/llm-providers/${encodeURIComponent(editingProvider.name)}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -133,7 +386,7 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
 
       if (res.ok) {
         onMessage('Provider 已更新');
-        resetForm();
+        closeModal();
         fetchProviders();
       } else {
         const result = await res.json();
@@ -190,16 +443,6 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
     }
   };
 
-  const startEdit = (provider: LLMProvider) => {
-    setEditingProvider(provider.name);
-    setFormName(provider.name);
-    setFormApiBase(provider.api_base);
-    setFormModel(provider.model);
-    setFormApiKey('');
-    setFormDescription(provider.description || '');
-    setShowAddForm(false);
-  };
-
   if (loading) {
     return <div className="text-[#828282]">加载中...</div>;
   }
@@ -209,96 +452,12 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-[#dcdcdc] text-xl font-bold">大模型配置</h2>
         <button
-          onClick={() => { resetForm(); setShowAddForm(true); }}
+          onClick={openAddModal}
           className="bg-[#ff6600] text-black px-4 py-2 rounded font-bold hover:bg-[#ff8533] transition-colors text-sm"
         >
           + 添加 Provider
         </button>
       </div>
-
-      {/* 添加/编辑表单 */}
-      {(showAddForm || editingProvider) && (
-        <div className="bg-[#121212] border border-[#333] rounded-lg p-6 mb-6">
-          <h3 className="text-[#dcdcdc] font-bold mb-4">
-            {editingProvider ? `编辑: ${editingProvider}` : '添加新 Provider'}
-          </h3>
-          
-          <div className="space-y-4">
-            <div>
-              <label className="block text-[#828282] text-sm mb-1">名称 *</label>
-              <input
-                type="text"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="如: Deepseek V3"
-                className="w-full bg-[#1a1a1a] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[#828282] text-sm mb-1">API Base URL *</label>
-              <input
-                type="text"
-                value={formApiBase}
-                onChange={(e) => setFormApiBase(e.target.value)}
-                placeholder="如: https://api.deepseek.com/v1"
-                className="w-full bg-[#1a1a1a] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[#828282] text-sm mb-1">模型名称 *</label>
-              <input
-                type="text"
-                value={formModel}
-                onChange={(e) => setFormModel(e.target.value)}
-                placeholder="如: deepseek-chat"
-                className="w-full bg-[#1a1a1a] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[#828282] text-sm mb-1">
-                API Key * {editingProvider && <span className="text-[#666]">(留空则不修改)</span>}
-              </label>
-              <input
-                type="password"
-                value={formApiKey}
-                onChange={(e) => setFormApiKey(e.target.value)}
-                placeholder={editingProvider ? '留空则保持原有 Key' : '输入 API Key'}
-                className="w-full bg-[#1a1a1a] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-[#828282] text-sm mb-1">描述</label>
-              <input
-                type="text"
-                value={formDescription}
-                onChange={(e) => setFormDescription(e.target.value)}
-                placeholder="如: 速度与质量平衡"
-                className="w-full bg-[#1a1a1a] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
-              />
-            </div>
-          </div>
-
-          <div className="flex gap-3 mt-6">
-            <button
-              onClick={editingProvider ? handleUpdate : handleAdd}
-              disabled={saving}
-              className="bg-[#ff6600] text-black px-6 py-2 rounded font-bold hover:bg-[#ff8533] transition-colors disabled:opacity-50"
-            >
-              {saving ? '保存中...' : (editingProvider ? '更新' : '添加')}
-            </button>
-            <button
-              onClick={resetForm}
-              className="bg-[#1a1a1a] text-[#dcdcdc] px-6 py-2 rounded font-medium hover:bg-[#242424] transition-colors border border-[#444]"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Provider 列表 */}
       {data && data.providers.length > 0 ? (
@@ -342,7 +501,7 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
                     </button>
                   )}
                   <button
-                    onClick={() => startEdit(provider)}
+                    onClick={() => openEditModal(provider)}
                     className="text-[#828282] hover:text-[#dcdcdc] text-sm"
                   >
                     编辑
@@ -363,6 +522,18 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
           <p className="text-[#828282]">暂无配置，请添加 Provider</p>
         </div>
       )}
+
+      {/* 添加/编辑弹窗 */}
+      <ProviderModal
+        isOpen={modalOpen}
+        editingProvider={editingProvider}
+        onClose={closeModal}
+        onSave={handleSave}
+        onTest={handleTest}
+        saving={saving}
+        testing={testing}
+        testResult={testResult}
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import fetch from 'node-fetch';
 import { config } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import {
@@ -192,6 +193,83 @@ router.post('/default', requireAdminAuth, async (req: Request, res: Response, ne
       success: true,
       data: { message: `已将 "${name}" 设为默认 Provider` }
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/llm-providers/test
+ * 测试 Provider 连通性
+ */
+router.post('/test', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { api_base, model, api_key } = req.body;
+
+    if (!api_base || !model || !api_key) {
+      throw new AppError(ErrorCode.VALIDATION_ERROR, '请提供 api_base, model 和 api_key', 400);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const response = await fetch(`${api_base}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${api_key}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [{ role: 'user', content: 'Hi' }],
+          max_tokens: 5
+        })
+      });
+
+      const latency = Date.now() - startTime;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.log(`[LLM Providers] 测试失败 (${response.status}): ${errorText}`);
+        
+        res.json({
+          success: true,
+          data: {
+            connected: false,
+            latency,
+            error: `API 返回 ${response.status}: ${errorText.slice(0, 200)}`
+          }
+        });
+        return;
+      }
+
+      const data = await response.json() as any;
+      const hasContent = !!data.choices?.[0]?.message?.content;
+
+      console.log(`[LLM Providers] 测试成功, 延迟: ${latency}ms`);
+
+      res.json({
+        success: true,
+        data: {
+          connected: true,
+          latency,
+          model: data.model || model,
+          hasContent
+        }
+      });
+    } catch (fetchError: any) {
+      const latency = Date.now() - startTime;
+      console.log(`[LLM Providers] 测试连接失败:`, fetchError.message);
+      
+      res.json({
+        success: true,
+        data: {
+          connected: false,
+          latency,
+          error: fetchError.message || '连接失败'
+        }
+      });
+    }
   } catch (error) {
     next(error);
   }
