@@ -821,12 +821,13 @@ export class CommentRefreshService {
 
     console.log(`[CommentRefresh] 启动服务: interval=${refreshConfig.interval / 1000}s, storyLimit=${refreshConfig.storyLimit}, batchSize=${refreshConfig.batchSize}`);
 
-    // 首次运行延迟 30 秒，避免与主调度器冲突
-    setTimeout(() => {
-      this.runOnce().catch(err => {
-        console.error('[CommentRefresh] 首次运行失败:', err);
-      });
-    }, 30000);
+    // 启动时不立即执行，等待第一个完整的间隔周期
+    // 如果需要启动后立即执行一次，可以取消下面的注释
+    // setTimeout(() => {
+    //   this.runOnce().catch(err => {
+    //     console.error('[CommentRefresh] 首次运行失败:', err);
+    //   });
+    // }, 30000);
 
     this.nextRunAt = Date.now() + refreshConfig.interval;
 
