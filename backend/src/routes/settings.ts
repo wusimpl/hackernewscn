@@ -15,12 +15,12 @@ const updatePromptSchema = z.object({
 });
 
 /**
- * 鉴权中间件(仅在自托管模式下需要)
+ * 鉴权中间件
  */
 const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-  // 如果没有设置 adminToken,跳过鉴权
+  // 必须设置 ADMIN_TOKEN 才能进行写操作
   if (!config.adminToken) {
-    return next();
+    throw new AppError(ErrorCode.UNAUTHORIZED, '管理功能未启用，请设置 ADMIN_TOKEN', 401);
   }
 
   const authHeader = req.headers.authorization;

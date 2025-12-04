@@ -60,3 +60,21 @@ export const strictRateLimit = rateLimit({
     },
   },
 });
+
+/**
+ * Chat 速率限制中间件
+ * 限制:每 IP 每分钟最多 10 次请求
+ */
+export const chatRateLimit = rateLimit({
+  windowMs: 60 * 1000, // 1 分钟
+  max: 10, // 最多 10 次请求
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: {
+      code: 'CHAT_RATE_LIMIT_EXCEEDED',
+      message: '聊天请求过于频繁,请稍后再试(每分钟最多 10 次)',
+    },
+  },
+});

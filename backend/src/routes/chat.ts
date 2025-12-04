@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import fetch from 'node-fetch';
 import { getCurrentProvider } from '../services/llmConfig';
+import { chatRateLimit } from '../middleware/rateLimit';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ interface ChatRequest {
  * POST /api/chat/stream
  * 流式聊天接口
  */
-router.post('/stream', async (req: Request, res: Response) => {
+router.post('/stream', chatRateLimit, async (req: Request, res: Response) => {
   const { articleContent, articleTitle, messages } = req.body as ChatRequest;
 
   if (!articleContent || !messages || !Array.isArray(messages)) {
