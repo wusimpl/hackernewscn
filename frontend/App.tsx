@@ -6,12 +6,12 @@ import { NotificationToast } from './components/NotificationToast';
 import { ErrorToast } from './components/ErrorToast';
 import { TranslatingToast } from './components/TranslatingToast';
 import { FavoritesModal } from './components/FavoritesModal';
+import { HistoryModal } from './components/HistoryModal';
 import { getFavorites, FavoriteItem } from './services/favoritesService';
 import { fetchStories, fetchMoreStories } from './services/hnService';
 import { getArticleCache, getArticle } from './services/cacheService';
 import { Story, LoadingState, CachedArticle } from './types';
 import { useServerCache } from './config';
-import { hasLegacyCache, clearLegacyCache, getMigrationFlag, setMigrationFlag } from './utils/migration';
 
 // Constants
 const INITIAL_ITEMS = 20;
@@ -74,6 +74,10 @@ const App: React.FC = () => {
   const [favorites, setFavorites] = useState<FavoriteItem[]>([]);
   const [openedFromFavorites, setOpenedFromFavorites] = useState(false);
 
+  // History State
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [openedFromHistory, setOpenedFromHistory] = useState(false);
+
   // Load favorites
   const loadFavorites = () => {
     setFavorites(getFavorites());
@@ -87,23 +91,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const loadInitialData = async () => {
       try {
-        // 检查是否需要数据迁移
-        if (useServerCache && !getMigrationFlag() && hasLegacyCache()) {
-          const shouldMigrate = confirm(
-            '检测到旧版本的本地缓存数据。\n\n' +
-            '新版本已切换到服务端缓存，所有用户可以共享翻译结果。\n' +
-            '是否清除本地缓存数据？\n\n' +
-            '（点击"确定"清除，点击"取消"保留但不再使用）'
-          );
-          
-          if (shouldMigrate) {
-            clearLegacyCache();
-            console.log('已清除旧版本本地缓存');
-          }
-          
-          setMigrationFlag();
-        }
-
         // Load article cache from backend
         const cacheRecords = await getArticleCache();
         // Convert ArticleTranslationRecord[] to Record<number, CachedArticle>
@@ -538,6 +525,7 @@ const App: React.FC = () => {
           loadFavorites();
           setFavoritesOpen(true);
         }}
+        onHistoryClick={() => setHistoryOpen(true)}
       />
 
       <ReaderModal
@@ -547,6 +535,10 @@ const App: React.FC = () => {
           if (openedFromFavorites) {
             setOpenedFromFavorites(false);
             setFavoritesOpen(true);
+          }
+          if (openedFromHistory) {
+            setOpenedFromHistory(false);
+            setHistoryOpen(true);
           }
         }}
         title={activeStory?.translatedTitle || activeStory?.title || "Reader"}
@@ -571,6 +563,16 @@ const App: React.FC = () => {
           handleArticleClick(story);
         }}
         onFavoritesChange={loadFavorites}
+      />
+
+      <HistoryModal
+        isOpen={historyOpen}
+        onClose={() => setHistoryOpen(false)}
+        onStoryClick={(story) => {
+          setHistoryOpen(false);
+          setOpenedFromHistory(true);
+          handleArticleClick(story);
+        }}
       />
 
       {notification && (

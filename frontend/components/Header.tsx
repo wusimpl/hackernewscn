@@ -5,6 +5,7 @@ interface HeaderProps {
   lastUpdatedAt: number | null;
   favoritesCount: number;
   onFavoritesClick: () => void;
+  onHistoryClick: () => void;
 }
 
 // Format timestamp to locale time string
@@ -17,7 +18,8 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   lastUpdatedAt,
   favoritesCount,
-  onFavoritesClick
+  onFavoritesClick,
+  onHistoryClick
 }) => {
   return (
     <header className="bg-[#ff6600] text-black px-2 py-1 flex items-center justify-between sticky top-0 z-50 shadow-md">
@@ -35,6 +37,14 @@ export const Header: React.FC<HeaderProps> = ({
           title="我的收藏"
         >
           收藏{favoritesCount > 0 ? ` (${favoritesCount})` : ''}
+        </button>
+        <span className="text-white/50">|</span>
+        <button
+          onClick={onHistoryClick}
+          className="text-white text-sm font-medium hover:underline transition-colors"
+          title="历史文章"
+        >
+          历史
         </button>
       </div>
 
