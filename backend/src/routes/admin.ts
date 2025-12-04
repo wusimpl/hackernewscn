@@ -1,9 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
+import fs from 'fs';
 import { getSchedulerService, getCommentRefreshService } from '../services/scheduler';
 import { config } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { StoryRepository, TitleTranslationRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository, SettingsRepository } from '../db/repositories';
+import { getDatabase } from '../db/connection';
 
 const router = Router();
 
@@ -434,6 +436,85 @@ router.post('/comment-refresh/trigger', requireAdminAuth, async (req: Request, r
       data: {
         message: '评论刷新已触发',
         status: statusBefore,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// 数据库监控接口
+// ============================================
+
+/**
+ * GET /api/admin/database/stats
+ * 获取数据库各表大小统计
+ */
+router.get('/database/stats', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const db = await getDatabase();
+    
+    // 获取数据库文件大小
+    let dbFileSizeMB = 0;
+    try {
+      const stats = fs.statSync(config.dbPath);
+      dbFileSizeMB = stats.size / (1024 * 1024);
+    } catch {
+      // 文件不存在或无法访问
+    }
+
+    // 获取所有表名和列信息
+    const tablesResult = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'");
+    const tableNames = tablesResult.length > 0 ? tablesResult[0].values.map(row => row[0] as string) : [];
+
+    // 获取每个表的统计信息
+    const tableStats = [];
+    for (const tableName of tableNames) {
+      // 获取行数
+      const countResult = db.exec(`SELECT COUNT(*) FROM "${tableName}"`);
+      const rowCount = countResult.length > 0 ? (countResult[0].values[0][0] as number) : 0;
+
+      let dataSizeBytes = 0;
+      
+      if (rowCount > 0) {
+        // 获取表的列信息
+        const columnsResult = db.exec(`PRAGMA table_info("${tableName}")`);
+        if (columnsResult.length > 0) {
+          const columnNames = columnsResult[0].values.map(row => row[1] as string);
+          
+          // 构建计算每行所有列字节长度的 SQL
+          // 使用 COALESCE 处理 NULL 值，LENGTH 对 BLOB 返回字节数，对 TEXT 返回字符数
+          // 使用 CAST AS BLOB 确保获取实际字节数
+          const lengthExprs = columnNames.map(col => 
+            `COALESCE(LENGTH(CAST("${col}" AS BLOB)), 0)`
+          ).join(' + ');
+          
+          const sizeResult = db.exec(`SELECT SUM(${lengthExprs}) FROM "${tableName}"`);
+          if (sizeResult.length > 0 && sizeResult[0].values[0][0] !== null) {
+            dataSizeBytes = sizeResult[0].values[0][0] as number;
+          }
+        }
+      }
+
+      tableStats.push({
+        name: tableName,
+        rowCount,
+        sizeMB: Math.round((dataSizeBytes / (1024 * 1024)) * 1000) / 1000,
+      });
+    }
+
+    // 按大小排序
+    tableStats.sort((a, b) => b.sizeMB - a.sizeMB);
+
+    res.json({
+      success: true,
+      data: {
+        dbFileSizeMB: Math.round(dbFileSizeMB * 1000) / 1000,
+        tables: tableStats,
+        totalTables: tableStats.length,
+        totalRows: tableStats.reduce((sum, t) => sum + t.rowCount, 0),
+        totalDataSizeMB: Math.round(tableStats.reduce((sum, t) => sum + t.sizeMB, 0) * 1000) / 1000,
       },
     });
   } catch (error) {

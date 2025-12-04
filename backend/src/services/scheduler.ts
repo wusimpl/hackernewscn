@@ -81,10 +81,10 @@ export class SchedulerService {
     const schedulerConfig = await getSchedulerConfig();
     console.log(`[Scheduler] Starting with interval: ${schedulerConfig.interval / 1000}s, storyLimit: ${schedulerConfig.storyLimit}`);
 
-    // Run immediately on start
-    this.runOnce().catch(err => {
-      console.error('[Scheduler] Initial run failed:', err);
-    });
+    // Run immediately on start (disabled - wait for first scheduled interval)
+    // this.runOnce().catch(err => {
+    //   console.error('[Scheduler] Initial run failed:', err);
+    // });
 
     // 计算下次执行时间（固定时间点）
     this.nextRunAt = Date.now() + schedulerConfig.interval;
