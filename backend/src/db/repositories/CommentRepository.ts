@@ -97,6 +97,30 @@ export class CommentRepository {
     return countMap;
   }
 
+  // 删除最旧的N条评论，返回被删除的评论ID列表
+  async deleteOldest(limit: number): Promise<number[]> {
+    const db = await getDatabase();
+    
+    // 先获取要删除的评论ID
+    const result = db.exec(
+      'SELECT comment_id FROM comments ORDER BY fetched_at ASC LIMIT ?',
+      [limit]
+    );
+    
+    if (result.length === 0 || result[0].values.length === 0) {
+      return [];
+    }
+    
+    const commentIds = result[0].values.map(row => row[0] as number);
+    
+    // 删除这些评论
+    const placeholders = commentIds.map(() => '?').join(',');
+    db.run(`DELETE FROM comments WHERE comment_id IN (${placeholders})`, commentIds);
+    
+    saveDatabase();
+    return commentIds;
+  }
+
   // Helper method to map database row to CommentRecord
   private mapRowToComment(columns: string[], row: any[]): CommentRecord {
     const obj: any = {};

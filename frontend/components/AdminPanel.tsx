@@ -9,7 +9,7 @@
  * - DashboardTab: Status overview and quick actions
  * - SettingsTab: Scheduler configuration
  * - PromptTab: LLM prompt editor
- * - CacheTab: Article cache management
+ * - DatabaseTab: Database monitoring
  */
 
 export { AdminLayout as AdminPanel } from './admin';

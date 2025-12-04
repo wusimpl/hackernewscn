@@ -14,6 +14,16 @@ interface DatabaseStats {
   totalDataSizeMB: number;
 }
 
+interface CleanupStatus {
+  isRunning: boolean;
+  lastRunAt: number | null;
+  nextRunAt: number | null;
+  lastCleanup: {
+    commentsDeleted: number;
+    storiesDeleted: number;
+  } | null;
+}
+
 interface Props {
   password: string;
   onMessage: (msg: string) => void;
@@ -37,7 +47,10 @@ const TABLE_NAME_MAP: Record<string, string> = {
 
 export const DatabaseTab: React.FC<Props> = ({ password, onMessage, onError }) => {
   const [stats, setStats] = useState<DatabaseStats | null>(null);
+  const [cleanupStatus, setCleanupStatus] = useState<CleanupStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [triggering, setTriggering] = useState(false);
 
   const fetchStats = async () => {
     setLoading(true);
@@ -58,14 +71,71 @@ export const DatabaseTab: React.FC<Props> = ({ password, onMessage, onError }) =
     }
   };
 
+  const fetchCleanupStatus = async () => {
+    setCleanupLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/cleanup/status`, {
+        headers: { Authorization: `Bearer ${password}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCleanupStatus(data.data);
+      }
+    } catch {
+      // 静默失败
+    } finally {
+      setCleanupLoading(false);
+    }
+  };
+
+  const triggerCleanup = async () => {
+    setTriggering(true);
+    try {
+      const res = await fetch(`${API_BASE}/admin/cleanup/trigger`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${password}` },
+      });
+      if (res.ok) {
+        onMessage('清理服务已触发');
+        // 延迟刷新状态
+        setTimeout(() => {
+          fetchCleanupStatus();
+          fetchStats();
+        }, 2000);
+      } else {
+        onError('触发清理失败');
+      }
+    } catch {
+      onError('连接失败');
+    } finally {
+      setTriggering(false);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchCleanupStatus();
   }, []);
 
   const formatSize = (sizeMB: number) => {
     if (sizeMB < 0.001) return '< 0.001 MB';
     if (sizeMB < 1) return `${(sizeMB * 1024).toFixed(2)} KB`;
     return `${sizeMB.toFixed(3)} MB`;
+  };
+
+  const formatTime = (timestamp: number | null) => {
+    if (!timestamp) return '-';
+    return new Date(timestamp).toLocaleString('zh-CN');
+  };
+
+  const formatTimeRemaining = (timestamp: number | null) => {
+    if (!timestamp) return '-';
+    const diff = timestamp - Date.now();
+    if (diff <= 0) return '即将执行';
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours > 0) return `${hours}小时${minutes}分钟后`;
+    return `${minutes}分钟后`;
   };
 
   const getTableDisplayName = (name: string) => {
@@ -112,12 +182,64 @@ export const DatabaseTab: React.FC<Props> = ({ password, onMessage, onError }) =
         </div>
       </div>
 
+      {/* 自动清理服务 */}
+      <div className="bg-[#121212] border border-[#333] rounded-lg p-4 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <span className="text-[#dcdcdc] font-medium">自动清理服务</span>
+            {cleanupStatus?.isRunning ? (
+              <span className="px-2 py-0.5 bg-green-900/30 text-green-400 text-xs rounded">运行中</span>
+            ) : (
+              <span className="px-2 py-0.5 bg-red-900/30 text-red-400 text-xs rounded">已停止</span>
+            )}
+          </div>
+          <button
+            onClick={triggerCleanup}
+            disabled={triggering || cleanupLoading}
+            className="bg-[#ff6600]/20 text-[#ff6600] px-4 py-2 rounded text-sm hover:bg-[#ff6600]/30 transition-colors border border-[#ff6600]/50 disabled:opacity-50"
+          >
+            {triggering ? '执行中...' : '立即清理'}
+          </button>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <div className="text-[#666] text-xs mb-1">上次执行</div>
+            <div className="text-[#828282] text-sm">
+              {cleanupLoading ? '...' : formatTime(cleanupStatus?.lastRunAt ?? null)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[#666] text-xs mb-1">下次执行</div>
+            <div className="text-[#828282] text-sm">
+              {cleanupLoading ? '...' : formatTimeRemaining(cleanupStatus?.nextRunAt ?? null)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[#666] text-xs mb-1">上次清理评论</div>
+            <div className="text-[#828282] text-sm">
+              {cleanupLoading ? '...' : (cleanupStatus?.lastCleanup?.commentsDeleted ?? 0).toLocaleString()} 条
+            </div>
+          </div>
+          <div>
+            <div className="text-[#666] text-xs mb-1">上次清理文章</div>
+            <div className="text-[#828282] text-sm">
+              {cleanupLoading ? '...' : (cleanupStatus?.lastCleanup?.storiesDeleted ?? 0).toLocaleString()} 条
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 text-[#666] text-xs">
+          清理策略：评论超过 10 万条时删除最旧 1 万条，文章超过 3000 条时删除最旧 200 条
+        </div>
+      </div>
+
       {/* 工具栏 */}
       <div className="bg-[#121212] border border-[#333] rounded-lg p-4 mb-4">
         <div className="flex items-center justify-between">
           <span className="text-[#828282] text-sm">各表存储统计（按大小排序）</span>
           <button
-            onClick={fetchStats}
+            onClick={() => { fetchStats(); fetchCleanupStatus(); }}
             disabled={loading}
             className="bg-[#1a1a1a] text-[#dcdcdc] px-4 py-2 rounded text-sm hover:bg-[#242424] transition-colors border border-[#444] disabled:opacity-50"
           >

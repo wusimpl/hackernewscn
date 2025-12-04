@@ -8,6 +8,7 @@ import { requestLogger } from './middleware/logger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { generalRateLimit } from './middleware/rateLimit';
 import { getSchedulerService, getCommentRefreshService } from './services/scheduler';
+import { getCleanupService } from './services/cleanup';
 
 const app = express();
 
@@ -60,6 +61,11 @@ async function startServer() {
     commentRefresh.start();
     console.log('✅ 评论刷新服务启动成功');
 
+    // Initialize and start the cleanup service
+    const cleanup = getCleanupService();
+    cleanup.start();
+    console.log('✅ 数据清理服务启动成功');
+
     const server = app.listen(config.port, () => {
       console.log(`\n🚀 服务器运行在端口 ${config.port}`);
       console.log(`📝 环境: ${config.isDevelopment ? '开发' : '生产'}`);
@@ -77,6 +83,10 @@ async function startServer() {
       // Stop the comment refresh service
       commentRefresh.stop();
       console.log('✅ 评论刷新服务已停止');
+
+      // Stop the cleanup service
+      cleanup.stop();
+      console.log('✅ 数据清理服务已停止');
 
       // Close the HTTP server
       server.close((err) => {

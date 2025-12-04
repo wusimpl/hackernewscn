@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import fs from 'fs';
 import { getSchedulerService, getCommentRefreshService } from '../services/scheduler';
+import { getCleanupService } from '../services/cleanup';
 import { config } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { StoryRepository, TitleTranslationRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository, SettingsRepository } from '../db/repositories';
@@ -515,6 +516,56 @@ router.get('/database/stats', requireAdminAuth, async (req: Request, res: Respon
         totalTables: tableStats.length,
         totalRows: tableStats.reduce((sum, t) => sum + t.rowCount, 0),
         totalDataSizeMB: Math.round(tableStats.reduce((sum, t) => sum + t.sizeMB, 0) * 1000) / 1000,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// 清理服务接口
+// ============================================
+
+/**
+ * GET /api/admin/cleanup/status
+ * 获取清理服务状态
+ */
+router.get('/cleanup/status', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const cleanup = getCleanupService();
+    const status = cleanup.getStatus();
+
+    res.json({
+      success: true,
+      data: status,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/admin/cleanup/trigger
+ * 手动触发清理服务
+ */
+router.post('/cleanup/trigger', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const cleanup = getCleanupService();
+    const statusBefore = cleanup.getStatus();
+
+    console.log('[Admin] 手动触发清理服务');
+
+    // 异步执行，不阻塞响应
+    cleanup.runOnce().catch(err => {
+      console.error('[Admin] 手动触发清理失败:', err);
+    });
+
+    res.json({
+      success: true,
+      data: {
+        message: '清理服务已触发',
+        status: statusBefore,
       },
     });
   } catch (error) {

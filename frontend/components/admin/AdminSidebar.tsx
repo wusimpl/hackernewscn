@@ -13,7 +13,6 @@ const tabs: { id: AdminTab; icon: string; label: string }[] = [
   { id: 'settings', icon: '⚙️', label: '调度配置' },
   { id: 'llm-providers', icon: '🤖', label: '大模型配置' },
   { id: 'prompt', icon: '📝', label: '提示词' },
-  { id: 'cache', icon: '💾', label: '缓存管理' },
   { id: 'database', icon: '🗄️', label: '数据库监控' },
 ];
 

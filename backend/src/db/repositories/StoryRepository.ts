@@ -163,6 +163,30 @@ export class StoryRepository {
     return result[0].values[0][0] as number;
   }
 
+  // 删除最旧的N条故事，返回被删除的故事ID列表
+  async deleteOldest(limit: number): Promise<number[]> {
+    const db = await getDatabase();
+    
+    // 先获取要删除的故事ID
+    const result = db.exec(
+      'SELECT story_id FROM stories ORDER BY fetched_at ASC LIMIT ?',
+      [limit]
+    );
+    
+    if (result.length === 0 || result[0].values.length === 0) {
+      return [];
+    }
+    
+    const storyIds = result[0].values.map(row => row[0] as number);
+    
+    // 删除这些故事（级联删除会自动清理关联的翻译、评论等）
+    const placeholders = storyIds.map(() => '?').join(',');
+    db.run(`DELETE FROM stories WHERE story_id IN (${placeholders})`, storyIds);
+    
+    saveDatabase();
+    return storyIds;
+  }
+
   // 辅助方法:将数据库行映射为Story对象
   private mapRowToStory(columns: string[], row: any[]): StoryRecord {
     const obj: any = {};

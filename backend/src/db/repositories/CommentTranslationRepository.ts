@@ -91,6 +91,16 @@ export class CommentTranslationRepository {
     return result[0].values[0][0] as number;
   }
 
+  // 根据评论ID列表删除翻译
+  async deleteByCommentIds(commentIds: number[]): Promise<void> {
+    if (commentIds.length === 0) return;
+    
+    const db = await getDatabase();
+    const placeholders = commentIds.map(() => '?').join(',');
+    db.run(`DELETE FROM comment_translations WHERE comment_id IN (${placeholders})`, commentIds);
+    saveDatabase();
+  }
+
   // Helper method to map database row to CommentTranslationRecord
   private mapRowToTranslation(columns: string[], row: any[]): CommentTranslationRecord {
     const obj: any = {};
