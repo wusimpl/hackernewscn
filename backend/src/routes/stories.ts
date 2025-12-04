@@ -421,7 +421,9 @@ async function fetchAndStoreCommentsForStory(story: Story, customPrompt: string)
     if (comments.length > 0) {
       // 翻译前N条评论（数量由配置决定）
       const { translateCommentsBatch } = await import('../services/llm');
-      const maxComments = config.commentTranslation.maxComments;
+      const settingsRepo = new SettingsRepository();
+      const maxCommentsStr = await settingsRepo.get('max_comment_translations');
+      const maxComments = maxCommentsStr ? parseInt(maxCommentsStr, 10) : 50;
       const commentsToTranslate = comments
         .filter(c => c.text && c.text.trim().length > 0 && !c.deleted && !c.dead)
         .slice(0, maxComments);

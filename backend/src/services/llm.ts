@@ -45,15 +45,7 @@ function getLLMSettings(): { apiKey: string; baseUrl: string; model: string } | 
     };
   }
   
-  // 回退到 .env 配置
-  if (config.llm.apiKey) {
-    return {
-      apiKey: config.llm.apiKey,
-      baseUrl: config.llm.baseUrl,
-      model: config.llm.model
-    };
-  }
-  
+  // 没有配置的 LLM 提供商
   return null;
 }
 

@@ -75,7 +75,14 @@ CREATE TABLE IF NOT EXISTS settings (
 -- 插入默认设置
 INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
   ('custom_prompt', '', strftime('%s', 'now')),
-  ('self_hosted', 'true', strftime('%s', 'now'));
+  ('self_hosted', 'true', strftime('%s', 'now')),
+  ('scheduler_interval', '300000', strftime('%s', 'now')),
+  ('scheduler_story_limit', '30', strftime('%s', 'now')),
+  ('max_comment_translations', '50', strftime('%s', 'now')),
+  ('comment_refresh_enabled', 'true', strftime('%s', 'now')),
+  ('comment_refresh_interval', '600000', strftime('%s', 'now')),
+  ('comment_refresh_story_limit', '30', strftime('%s', 'now')),
+  ('comment_refresh_batch_size', '5', strftime('%s', 'now'));
 
 -- 调度器状态表
 CREATE TABLE IF NOT EXISTS scheduler_status (

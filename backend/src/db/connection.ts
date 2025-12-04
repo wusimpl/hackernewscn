@@ -89,6 +89,25 @@ async function runMigrations(database: Database): Promise<void> {
     console.error('[Migration] 迁移失败:', error);
     // 不抛出错误，允许应用继续运行
   }
+
+  // 迁移2: 添加调度器和评论刷新配置到 settings 表
+  try {
+    console.log('[Migration] 检查并添加调度器配置项');
+    database.run(`
+      INSERT OR IGNORE INTO settings (key, value, updated_at) VALUES
+        ('scheduler_interval', '300000', strftime('%s', 'now')),
+        ('scheduler_story_limit', '30', strftime('%s', 'now')),
+        ('max_comment_translations', '50', strftime('%s', 'now')),
+        ('comment_refresh_enabled', 'true', strftime('%s', 'now')),
+        ('comment_refresh_interval', '600000', strftime('%s', 'now')),
+        ('comment_refresh_story_limit', '30', strftime('%s', 'now')),
+        ('comment_refresh_batch_size', '5', strftime('%s', 'now'))
+    `);
+    console.log('[Migration] 调度器配置项添加成功');
+  } catch (error) {
+    console.error('[Migration] 添加调度器配置失败:', error);
+    // 不抛出错误，允许应用继续运行
+  }
 }
 
 // 关闭数据库连接

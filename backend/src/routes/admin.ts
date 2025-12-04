@@ -1,10 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { getSchedulerService, getCommentRefreshService } from '../services/scheduler';
-import { config, reloadSchedulerConfig, reloadCommentRefreshConfig } from '../config';
+import { config } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
-import { updateEnvVar, deleteEnvVar, getEnvVar } from '../utils/envManager';
-import { StoryRepository, TitleTranslationRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository } from '../db/repositories';
+import { StoryRepository, TitleTranslationRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository, SettingsRepository } from '../db/repositories';
 
 const router = Router();
 
@@ -141,26 +140,30 @@ router.get('/stats', requireAdminAuth, async (req: Request, res: Response, next:
 
 /**
  * GET /api/admin/scheduler-config
- * 获取调度器配置参数（从 .env 读取）
+ * 获取调度器配置参数（从数据库读取）
  */
 router.get('/scheduler-config', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // 从 .env 读取当前配置
-    const intervalEnv = getEnvVar('SCHEDULER_INTERVAL');
-    const storyLimitEnv = getEnvVar('SCHEDULER_STORY_LIMIT');
-    const maxCommentTranslationsEnv = getEnvVar('MAX_COMMENT_TRANSLATIONS');
+    const settingsRepo = new SettingsRepository();
 
     // 默认值
     const DEFAULT_INTERVAL = 300000; // 5分钟
     const DEFAULT_STORY_LIMIT = 30;
     const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
 
+    // 从数据库读取当前配置
+    const [intervalStr, storyLimitStr, maxCommentTranslationsStr] = await Promise.all([
+      settingsRepo.get('scheduler_interval'),
+      settingsRepo.get('scheduler_story_limit'),
+      settingsRepo.get('max_comment_translations'),
+    ]);
+
     res.json({
       success: true,
       data: {
-        interval: intervalEnv ? parseInt(intervalEnv, 10) : DEFAULT_INTERVAL,
-        storyLimit: storyLimitEnv ? parseInt(storyLimitEnv, 10) : DEFAULT_STORY_LIMIT,
-        maxCommentTranslations: maxCommentTranslationsEnv ? parseInt(maxCommentTranslationsEnv, 10) : DEFAULT_MAX_COMMENT_TRANSLATIONS,
+        interval: intervalStr ? parseInt(intervalStr, 10) : DEFAULT_INTERVAL,
+        storyLimit: storyLimitStr ? parseInt(storyLimitStr, 10) : DEFAULT_STORY_LIMIT,
+        maxCommentTranslations: maxCommentTranslationsStr ? parseInt(maxCommentTranslationsStr, 10) : DEFAULT_MAX_COMMENT_TRANSLATIONS,
         defaults: {
           interval: DEFAULT_INTERVAL,
           storyLimit: DEFAULT_STORY_LIMIT,
@@ -175,30 +178,30 @@ router.get('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
 
 /**
  * PUT /api/admin/scheduler-config
- * 更新调度器配置参数（写入 .env 文件）
+ * 更新调度器配置参数（写入数据库）
  */
 router.put('/scheduler-config', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = schedulerConfigSchema.parse(req.body);
+    const settingsRepo = new SettingsRepository();
     const scheduler = getSchedulerService();
 
     if (body.interval !== undefined) {
-      updateEnvVar('SCHEDULER_INTERVAL', body.interval.toString());
+      await settingsRepo.set('scheduler_interval', body.interval.toString());
       console.log(`[Admin] 调度间隔已更新为 ${body.interval}ms`);
     }
 
     if (body.storyLimit !== undefined) {
-      updateEnvVar('SCHEDULER_STORY_LIMIT', body.storyLimit.toString());
+      await settingsRepo.set('scheduler_story_limit', body.storyLimit.toString());
       console.log(`[Admin] 抓取数量已更新为 ${body.storyLimit}`);
     }
 
     if (body.maxCommentTranslations !== undefined) {
-      updateEnvVar('MAX_COMMENT_TRANSLATIONS', body.maxCommentTranslations.toString());
+      await settingsRepo.set('max_comment_translations', body.maxCommentTranslations.toString());
       console.log(`[Admin] 评论翻译数量已更新为 ${body.maxCommentTranslations}`);
     }
 
-    // 重新加载配置并重启调度器
-    reloadSchedulerConfig();
+    // 重启调度器以应用新配置
     scheduler.restart();
 
     res.json({
@@ -217,10 +220,11 @@ router.put('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
 
 /**
  * POST /api/admin/scheduler-config/reset
- * 重置调度器配置为默认值（从 .env 删除自定义配置）
+ * 重置调度器配置为默认值（重置数据库配置）
  */
 router.post('/scheduler-config/reset', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const settingsRepo = new SettingsRepository();
     const scheduler = getSchedulerService();
 
     // 默认值
@@ -228,15 +232,16 @@ router.post('/scheduler-config/reset', requireAdminAuth, async (req: Request, re
     const DEFAULT_STORY_LIMIT = 30;
     const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
 
-    // 从 .env 删除自定义配置
-    deleteEnvVar('SCHEDULER_INTERVAL');
-    deleteEnvVar('SCHEDULER_STORY_LIMIT');
-    deleteEnvVar('MAX_COMMENT_TRANSLATIONS');
+    // 重置数据库配置为默认值
+    await Promise.all([
+      settingsRepo.set('scheduler_interval', DEFAULT_INTERVAL.toString()),
+      settingsRepo.set('scheduler_story_limit', DEFAULT_STORY_LIMIT.toString()),
+      settingsRepo.set('max_comment_translations', DEFAULT_MAX_COMMENT_TRANSLATIONS.toString()),
+    ]);
 
     console.log('[Admin] 调度配置已重置为默认值');
 
-    // 重新加载配置并重启调度器
-    reloadSchedulerConfig();
+    // 重启调度器以应用新配置
     scheduler.restart();
 
     res.json({
@@ -277,14 +282,11 @@ router.get('/comment-refresh/status', requireAdminAuth, async (req: Request, res
 
 /**
  * GET /api/admin/comment-refresh/config
- * 获取评论刷新配置参数
+ * 获取评论刷新配置参数（从数据库读取）
  */
 router.get('/comment-refresh/config', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const enabledEnv = getEnvVar('COMMENT_REFRESH_ENABLED');
-    const intervalEnv = getEnvVar('COMMENT_REFRESH_INTERVAL');
-    const storyLimitEnv = getEnvVar('COMMENT_REFRESH_STORY_LIMIT');
-    const batchSizeEnv = getEnvVar('COMMENT_REFRESH_BATCH_SIZE');
+    const settingsRepo = new SettingsRepository();
 
     // 默认值
     const DEFAULT_ENABLED = true;
@@ -292,13 +294,21 @@ router.get('/comment-refresh/config', requireAdminAuth, async (req: Request, res
     const DEFAULT_STORY_LIMIT = 30;
     const DEFAULT_BATCH_SIZE = 5;
 
+    // 从数据库读取当前配置
+    const [enabledStr, intervalStr, storyLimitStr, batchSizeStr] = await Promise.all([
+      settingsRepo.get('comment_refresh_enabled'),
+      settingsRepo.get('comment_refresh_interval'),
+      settingsRepo.get('comment_refresh_story_limit'),
+      settingsRepo.get('comment_refresh_batch_size'),
+    ]);
+
     res.json({
       success: true,
       data: {
-        enabled: enabledEnv !== undefined ? enabledEnv !== 'false' : DEFAULT_ENABLED,
-        interval: intervalEnv ? parseInt(intervalEnv, 10) : DEFAULT_INTERVAL,
-        storyLimit: storyLimitEnv ? parseInt(storyLimitEnv, 10) : DEFAULT_STORY_LIMIT,
-        batchSize: batchSizeEnv ? parseInt(batchSizeEnv, 10) : DEFAULT_BATCH_SIZE,
+        enabled: enabledStr ? enabledStr === 'true' : DEFAULT_ENABLED,
+        interval: intervalStr ? parseInt(intervalStr, 10) : DEFAULT_INTERVAL,
+        storyLimit: storyLimitStr ? parseInt(storyLimitStr, 10) : DEFAULT_STORY_LIMIT,
+        batchSize: batchSizeStr ? parseInt(batchSizeStr, 10) : DEFAULT_BATCH_SIZE,
         defaults: {
           enabled: DEFAULT_ENABLED,
           interval: DEFAULT_INTERVAL,
@@ -314,35 +324,35 @@ router.get('/comment-refresh/config', requireAdminAuth, async (req: Request, res
 
 /**
  * PUT /api/admin/comment-refresh/config
- * 更新评论刷新配置参数
+ * 更新评论刷新配置参数（写入数据库）
  */
 router.put('/comment-refresh/config', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const body = commentRefreshConfigSchema.parse(req.body);
+    const settingsRepo = new SettingsRepository();
     const commentRefresh = getCommentRefreshService();
 
     if (body.enabled !== undefined) {
-      updateEnvVar('COMMENT_REFRESH_ENABLED', body.enabled.toString());
+      await settingsRepo.set('comment_refresh_enabled', body.enabled.toString());
       console.log(`[Admin] 评论刷新已${body.enabled ? '启用' : '禁用'}`);
     }
 
     if (body.interval !== undefined) {
-      updateEnvVar('COMMENT_REFRESH_INTERVAL', body.interval.toString());
+      await settingsRepo.set('comment_refresh_interval', body.interval.toString());
       console.log(`[Admin] 评论刷新间隔已更新为 ${body.interval}ms`);
     }
 
     if (body.storyLimit !== undefined) {
-      updateEnvVar('COMMENT_REFRESH_STORY_LIMIT', body.storyLimit.toString());
+      await settingsRepo.set('comment_refresh_story_limit', body.storyLimit.toString());
       console.log(`[Admin] 评论刷新文章数已更新为 ${body.storyLimit}`);
     }
 
     if (body.batchSize !== undefined) {
-      updateEnvVar('COMMENT_REFRESH_BATCH_SIZE', body.batchSize.toString());
+      await settingsRepo.set('comment_refresh_batch_size', body.batchSize.toString());
       console.log(`[Admin] 评论刷新批次大小已更新为 ${body.batchSize}`);
     }
 
-    // 重新加载配置并重启服务
-    reloadCommentRefreshConfig();
+    // 重启服务以应用新配置
     commentRefresh.restart();
 
     res.json({
@@ -362,10 +372,11 @@ router.put('/comment-refresh/config', requireAdminAuth, async (req: Request, res
 
 /**
  * POST /api/admin/comment-refresh/config/reset
- * 重置评论刷新配置为默认值
+ * 重置评论刷新配置为默认值（重置数据库配置）
  */
 router.post('/comment-refresh/config/reset', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    const settingsRepo = new SettingsRepository();
     const commentRefresh = getCommentRefreshService();
 
     // 默认值
@@ -374,16 +385,17 @@ router.post('/comment-refresh/config/reset', requireAdminAuth, async (req: Reque
     const DEFAULT_STORY_LIMIT = 30;
     const DEFAULT_BATCH_SIZE = 5;
 
-    // 从 .env 删除自定义配置
-    deleteEnvVar('COMMENT_REFRESH_ENABLED');
-    deleteEnvVar('COMMENT_REFRESH_INTERVAL');
-    deleteEnvVar('COMMENT_REFRESH_STORY_LIMIT');
-    deleteEnvVar('COMMENT_REFRESH_BATCH_SIZE');
+    // 重置数据库配置为默认值
+    await Promise.all([
+      settingsRepo.set('comment_refresh_enabled', DEFAULT_ENABLED.toString()),
+      settingsRepo.set('comment_refresh_interval', DEFAULT_INTERVAL.toString()),
+      settingsRepo.set('comment_refresh_story_limit', DEFAULT_STORY_LIMIT.toString()),
+      settingsRepo.set('comment_refresh_batch_size', DEFAULT_BATCH_SIZE.toString()),
+    ]);
 
     console.log('[Admin] 评论刷新配置已重置为默认值');
 
-    // 重新加载配置并重启服务
-    reloadCommentRefreshConfig();
+    // 重启服务以应用新配置
     commentRefresh.restart();
 
     res.json({

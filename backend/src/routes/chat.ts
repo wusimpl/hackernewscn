@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import fetch from 'node-fetch';
-import { config } from '../config';
+import { getLLMConfig } from '../services/llmConfig';
 
 const router = Router();
 
@@ -61,7 +61,9 @@ router.post('/stream', async (req: Request, res: Response) => {
     return;
   }
 
-  if (!config.llm.apiKey) {
+  // 获取 LLM 配置
+  const llmConfig = await getLLMConfig();
+  if (!llmConfig) {
     res.status(500).json({
       success: false,
       error: { code: 'LLM_NOT_CONFIGURED', message: 'LLM服务未配置' }
@@ -85,14 +87,14 @@ router.post('/stream', async (req: Request, res: Response) => {
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
 
-    const response = await fetch(`${config.llm.baseUrl}/chat/completions`, {
+    const response = await fetch(`${llmConfig.baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.llm.apiKey}`
+        'Authorization': `Bearer ${llmConfig.apiKey}`
       },
       body: JSON.stringify({
-        model: config.llm.model,
+        model: llmConfig.model,
         messages: fullMessages,
         temperature: 0.7,
         stream: true

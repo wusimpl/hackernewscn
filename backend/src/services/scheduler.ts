@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { config, reloadCommentRefreshConfig } from '../config';
+import { config } from '../config';
 import { refreshTopStories, saveStoryToDatabase, fetchStoryComments, fetchStoryDetails } from './hn';
 import { translateTitlesBatch, translateArticle, translateCommentsBatch, generateTLDR, DEFAULT_PROMPT } from './llm';
 import { getQueueService } from './queue';
@@ -8,12 +8,25 @@ import { TitleTranslationRepository, SettingsRepository, ArticleTranslationRepos
 import { Story, CommentRecord } from '../types';
 
 /**
- * 获取当前调度器配置（直接从 config 读取，config 从 .env 加载）
+ * 获取当前调度器配置（从数据库读取）
  */
-function getSchedulerConfig(): { interval: number; storyLimit: number } {
+async function getSchedulerConfig(): Promise<{ interval: number; storyLimit: number; maxCommentTranslations: number }> {
+  const settingsRepo = new SettingsRepository();
+  
+  const DEFAULT_INTERVAL = 300000; // 5分钟
+  const DEFAULT_STORY_LIMIT = 30;
+  const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
+  
+  const [intervalStr, storyLimitStr, maxCommentTranslationsStr] = await Promise.all([
+    settingsRepo.get('scheduler_interval'),
+    settingsRepo.get('scheduler_story_limit'),
+    settingsRepo.get('max_comment_translations'),
+  ]);
+  
   return {
-    interval: config.scheduler.interval,
-    storyLimit: config.scheduler.storyLimit,
+    interval: intervalStr ? parseInt(intervalStr, 10) : DEFAULT_INTERVAL,
+    storyLimit: storyLimitStr ? parseInt(storyLimitStr, 10) : DEFAULT_STORY_LIMIT,
+    maxCommentTranslations: maxCommentTranslationsStr ? parseInt(maxCommentTranslationsStr, 10) : DEFAULT_MAX_COMMENT_TRANSLATIONS,
   };
 }
 
@@ -65,7 +78,7 @@ export class SchedulerService {
       return;
     }
 
-    const schedulerConfig = getSchedulerConfig();
+    const schedulerConfig = await getSchedulerConfig();
     console.log(`[Scheduler] Starting with interval: ${schedulerConfig.interval / 1000}s, storyLimit: ${schedulerConfig.storyLimit}`);
 
     // Run immediately on start
@@ -81,8 +94,10 @@ export class SchedulerService {
       this.runOnce().catch(err => {
         console.error('[Scheduler] Scheduled run failed:', err);
       });
-      // 每次执行后更新下次执行时间
-      this.nextRunAt = Date.now() + schedulerConfig.interval;
+      // 每次执行后更新下次执行时间（动态读取配置）
+      getSchedulerConfig().then(config => {
+        this.nextRunAt = Date.now() + config.interval;
+      });
     }, schedulerConfig.interval);
 
     this.isRunning = true;
@@ -121,7 +136,7 @@ export class SchedulerService {
 
     try {
       // Step 1: Fetch top stories from HN
-      const schedulerConfig = getSchedulerConfig();
+      const schedulerConfig = await getSchedulerConfig();
       const stories = await refreshTopStories(schedulerConfig.storyLimit);
       this.storiesFetched = stories.length;
       console.log(`[Scheduler] Fetched ${stories.length} stories`);
@@ -233,7 +248,7 @@ export class SchedulerService {
    * Get current scheduler status with config
    */
   async getStatusWithConfig(): Promise<SchedulerStatus> {
-    const schedulerConfig = getSchedulerConfig();
+    const schedulerConfig = await getSchedulerConfig();
     // 从数据库获取实际的标题翻译总数
     const titlesCount = await this.titleTranslationRepo.count();
     return {
@@ -581,11 +596,11 @@ export class SchedulerService {
   }
 
   /**
-   * Translate comments for a story (max 50 comments including nested)
+   * Translate comments for a story (max N comments including nested)
    * Only translates comments that have text content
    * 
-   * 翻译范围：前50条评论（包括嵌套评论，按树结构遍历顺序）
-   * 翻译方式：一次性发送50条评论翻译，不分批次
+   * 翻译范围：前N条评论（包括嵌套评论，按树结构遍历顺序）
+   * 翻译方式：一次性发送N条评论翻译，不分批次
    * 
    * @returns 翻译结果数组，用于后续入库
    */
@@ -595,7 +610,8 @@ export class SchedulerService {
     customPrompt: string
   ): Promise<{ comment_id: number; text_en: string; text_zh: string }[]> {
     // 按树结构顺序获取前N条有文本内容的评论（包括嵌套评论）
-    const maxComments = config.commentTranslation.maxComments;
+    const schedulerConfig = await getSchedulerConfig();
+    const maxComments = schedulerConfig.maxCommentTranslations;
     const commentsWithText = this.getCommentsInTreeOrder(comments, storyId, maxComments);
 
     if (commentsWithText.length === 0) {
@@ -718,14 +734,33 @@ export function getSchedulerService(): SchedulerService {
 // ============================================
 
 /**
- * 获取评论刷新配置
+ * 获取评论刷新配置（从数据库读取）
  */
-function getCommentRefreshConfig() {
+async function getCommentRefreshConfig(): Promise<{
+  enabled: boolean;
+  interval: number;
+  storyLimit: number;
+  batchSize: number;
+}> {
+  const settingsRepo = new SettingsRepository();
+  
+  const DEFAULT_ENABLED = true;
+  const DEFAULT_INTERVAL = 600000; // 10分钟
+  const DEFAULT_STORY_LIMIT = 30;
+  const DEFAULT_BATCH_SIZE = 5;
+  
+  const [enabledStr, intervalStr, storyLimitStr, batchSizeStr] = await Promise.all([
+    settingsRepo.get('comment_refresh_enabled'),
+    settingsRepo.get('comment_refresh_interval'),
+    settingsRepo.get('comment_refresh_story_limit'),
+    settingsRepo.get('comment_refresh_batch_size'),
+  ]);
+  
   return {
-    enabled: config.commentRefresh.enabled,
-    interval: config.commentRefresh.interval,
-    storyLimit: config.commentRefresh.storyLimit,
-    batchSize: config.commentRefresh.batchSize,
+    enabled: enabledStr ? enabledStr === 'true' : DEFAULT_ENABLED,
+    interval: intervalStr ? parseInt(intervalStr, 10) : DEFAULT_INTERVAL,
+    storyLimit: storyLimitStr ? parseInt(storyLimitStr, 10) : DEFAULT_STORY_LIMIT,
+    batchSize: batchSizeStr ? parseInt(batchSizeStr, 10) : DEFAULT_BATCH_SIZE,
   };
 }
 
@@ -772,7 +807,7 @@ export class CommentRefreshService {
    * 启动评论刷新服务
    */
   async start(): Promise<void> {
-    const refreshConfig = getCommentRefreshConfig();
+    const refreshConfig = await getCommentRefreshConfig();
     
     if (!refreshConfig.enabled) {
       console.log('[CommentRefresh] 评论刷新服务已禁用');
@@ -799,7 +834,10 @@ export class CommentRefreshService {
       this.runOnce().catch(err => {
         console.error('[CommentRefresh] 定时运行失败:', err);
       });
-      this.nextRunAt = Date.now() + refreshConfig.interval;
+      // 动态读取配置更新下次执行时间
+      getCommentRefreshConfig().then(config => {
+        this.nextRunAt = Date.now() + config.interval;
+      });
     }, refreshConfig.interval);
 
     this.isRunning = true;
@@ -832,7 +870,7 @@ export class CommentRefreshService {
    * 执行一次评论刷新
    */
   async runOnce(): Promise<void> {
-    const refreshConfig = getCommentRefreshConfig();
+    const refreshConfig = await getCommentRefreshConfig();
     
     if (!refreshConfig.enabled) {
       console.log('[CommentRefresh] 服务已禁用，跳过执行');
@@ -951,7 +989,8 @@ export class CommentRefreshService {
       );
 
       // 限制翻译数量
-      const maxComments = config.commentTranslation.maxComments;
+      const schedulerConfig = await getSchedulerConfig();
+      const maxComments = schedulerConfig.maxCommentTranslations;
       const limitedCommentsToTranslate = commentsToTranslate.slice(0, maxComments);
 
       let translations: { comment_id: number; text_en: string; text_zh: string }[] = [];
@@ -1000,7 +1039,7 @@ export class CommentRefreshService {
    * 获取服务状态
    */
   async getStatus(): Promise<CommentRefreshStatus> {
-    const refreshConfig = getCommentRefreshConfig();
+    const refreshConfig = await getCommentRefreshConfig();
     return {
       isRunning: this.isRunning,
       enabled: refreshConfig.enabled,
@@ -1015,7 +1054,7 @@ export class CommentRefreshService {
    * 获取带配置的服务状态
    */
   async getStatusWithConfig(): Promise<CommentRefreshStatus> {
-    const refreshConfig = getCommentRefreshConfig();
+    const refreshConfig = await getCommentRefreshConfig();
     return {
       isRunning: this.isRunning,
       enabled: refreshConfig.enabled,
