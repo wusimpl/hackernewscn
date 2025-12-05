@@ -242,7 +242,7 @@ export const translateArticle = async (
   if (!markdownContent) return "";
 
   const startTime = Date.now();
-  console.log(`  [LLM Service] 准备翻译文章, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.length}字符`);
+  console.log(`  [LLM Service] 准备翻译文章, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.split(/\s+/).length}单词`);
 
   // 详细版提示词
   const systemPromptVerbose = `${promptToUse}
@@ -318,7 +318,7 @@ export const generateTLDR = async (
   const promptToUse = customPrompt ?? getPrompt('tldr');
 
   const startTime = Date.now();
-  console.log(`  [LLM Service] 准备生成TLDR, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.length}字符`);
+  console.log(`  [LLM Service] 准备生成TLDR, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.split(/\s+/).length}单词`);
 
   const apiStartTime = Date.now();
   const content = await callLLM([

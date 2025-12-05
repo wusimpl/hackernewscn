@@ -184,7 +184,7 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
 
         const markdown = await response.text();
         const fetchDuration = ((Date.now() - fetchStartTime) / 1000).toFixed(2);
-        console.log(`  [步骤1完成] 耗时: ${fetchDuration}秒, 内容长度: ${markdown.length}字符`);
+        console.log(`  [步骤1完成] 耗时: ${fetchDuration}秒, 内容长度: ${markdown.split(/\s+/).length}单词`);
 
         if (!markdown || markdown.length < 50) {
           throw new Error('Content empty');
