@@ -6,6 +6,16 @@
 ## 网站体验地址，你也可以自己部署
 [HackerNewsCN](https://hackernewscn.wusimpl.fun/)
 
+## 核心功能
+
+- 自动抓取 HackerNews 热门内容
+- LLM 智能翻译 (标题、正文、摘要和评论)
+- 本地数据库缓存
+- 实时翻译进度推送
+- 收藏夹与阅读历史
+- 文章 AI 对话
+- 管理员设置面板
+
 ## 技术栈
 
 ### 后端
@@ -19,20 +29,11 @@
 - **语言**: TypeScript
 - **构建工具**: Vite
 
-## 核心功能
-
-- 自动抓取 HackerNews 热门内容
-- LLM 智能翻译 (标题、正文、摘要和评论)
-- 本地数据库缓存
-- 实时翻译进度推送
-- 收藏夹与阅读历史
-- 文章 AI 对话
-- 管理员设置面板
-
-
-## 快速开始
+## 部署教程
 
 ### 环境准备
+
+0. 确保已安装node.js
 
 1. 复制配置文件:
 ```bash
@@ -64,28 +65,17 @@ ADMIN_TOKEN=your-admin-token
 
 ### 安装依赖
 
-根目录安装:
-```bash
-npm install
-```
-
 分别安装前后端依赖:
 ```bash
 cd backend && npm install
 cd frontend && npm install
 ```
 
-### 开发模式
+### 以开发模式启动
 
-同时启动前后端:
 ```bash
-npm run dev:all
-```
-
-分别启动:
-```bash
-npm run dev:backend  # 后端端口 3000
-npm run dev:frontend # 前端端口 5173
+cd backend && npm run dev
+cd frontend && npm run dev
 ```
 
 ## 许可证
