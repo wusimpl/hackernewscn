@@ -1,25 +1,17 @@
 import fetch from 'node-fetch';
-import { config } from '../config';
 import { getCurrentProvider } from './llmConfig';
-import { LLMProvider } from '../types';
+import {
+  getPrompt,
+  getDefaultPrompt,
+  DEFAULT_ARTICLE_PROMPT,
+  DEFAULT_TLDR_PROMPT,
+  DEFAULT_COMMENT_PROMPT,
+  PromptType
+} from './promptsConfig';
 
-// 默认提示词(与前端保持一致)
-export const DEFAULT_PROMPT = `将英文文本重写成通俗流畅、引人入胜的简体中文。
-
-核心要求:
-
-- 读者与风格: 面向对AI和科技感兴趣的普通读者。风格要像讲故事,清晰易懂,而不是写学术论文。
-- 准确第一: 核心事实、数据和逻辑必须与原文完全一致。
-- 行文流畅: 优先使用地道的中文语序。将英文长句拆解为更自然的中文短句。
-- 术语标准: 专业术语使用行业公认的标准翻译(如 \`overfitting\` -> \`过拟合\`)。第一次出现时,在译文后用括号加注英文原文。
-- 保留格式: 保持原文的标题、粗体、斜体、图片等Markdown格式。
-
-常用词汇:
-- AI Agent -> AI 智能体
-- LLM -> 大语言模型
-- Vibe Coding -> 凭感觉编程
-- the Bitter Lesson -> 苦涩的教训
-- Context Engineering -> 上下文工程`;
+// 向后兼容：导出默认提示词常量
+export const DEFAULT_PROMPT = DEFAULT_ARTICLE_PROMPT;
+export { DEFAULT_TLDR_PROMPT, DEFAULT_COMMENT_PROMPT, PromptType, getDefaultPrompt };
 
 interface Message {
   role: string;
@@ -45,7 +37,6 @@ function getLLMSettings(): { apiKey: string; baseUrl: string; model: string; isT
       isThinkingModel: provider.is_thinking_model ?? false
     };
   }
-  
   // 没有配置的 LLM 提供商
   return null;
 }
@@ -71,13 +62,11 @@ async function callLLM(
   retries: number = 3
 ): Promise<string | null> {
   const llmSettings = getLLMSettings();
-  
+
   if (!llmSettings) {
     console.warn('[LLM Service] No LLM provider configured');
     return null;
   }
-
-  let lastError: any = null;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
@@ -117,16 +106,15 @@ async function callLLM(
 
       const data = await response.json() as any;
       let responseContent = data.choices?.[0]?.message?.content || null;
-      
+
       // 如果是推理模型，移除思维链内容
       if (responseContent && llmSettings.isThinkingModel) {
         responseContent = stripThinkingContent(responseContent);
       }
-      
+
       return responseContent;
 
     } catch (error) {
-      lastError = error;
       console.error(`[LLM Service] Attempt ${attempt}/${retries} failed:`, error);
 
       // 指数退避
@@ -150,33 +138,32 @@ async function callLLM(
  */
 export const translateTitlesBatch = async (
   items: { id: number; title: string }[],
-  customPrompt: string = DEFAULT_PROMPT
+  customPrompt?: string
 ): Promise<TranslationResult[]> => {
+  const promptToUse = customPrompt ?? getPrompt('article');
   if (items.length === 0) return [];
 
   const startTime = Date.now();
   console.log(`[LLM Service] 开始批量翻译 ${items.length} 个标题`);
 
-  const systemPrompt = `
-    ${customPrompt}
+  const systemPrompt = `${promptToUse}
 
-    ---------------------------------------------------
-    TASK: Translate the headlines provided by the user.
+---------------------------------------------------
+TASK: Translate the headlines provided by the user.
 
-    CRITICAL OUTPUT INSTRUCTIONS:
-    1. You MUST return valid JSON only.
-    2. The root object MUST have a property "translations" which is an array.
-    3. Each item in the array must contain:
-       - "id": The original number ID.
-       - "translatedTitle": The Chinese translation.
+CRITICAL OUTPUT INSTRUCTIONS:
+1. You MUST return valid JSON only.
+2. The root object MUST have a property "translations" which is an array.
+3. Each item in the array must contain:
+   - "id": The original number ID.
+   - "translatedTitle": The Chinese translation.
 
-    Example JSON structure:
-    {
-      "translations": [
-        { "id": 123, "translatedTitle": "中文标题..." }
-      ]
-    }
-  `;
+Example JSON structure:
+{
+  "translations": [
+    { "id": 123, "translatedTitle": "中文标题..." }
+  ]
+}`;
 
   const userPrompt = JSON.stringify(items);
 
@@ -238,6 +225,7 @@ export const translateTitlesBatch = async (
   }
 };
 
+
 /**
  * 翻译完整的 Markdown 文章
  * @param markdownContent 原始 Markdown 内容
@@ -247,78 +235,58 @@ export const translateTitlesBatch = async (
  */
 export const translateArticle = async (
   markdownContent: string,
-  customPrompt: string = DEFAULT_PROMPT,
+  customPrompt?: string,
   storyId?: number
 ): Promise<string> => {
+  const promptToUse = customPrompt ?? getPrompt('article');
   if (!markdownContent) return "";
 
   const startTime = Date.now();
   console.log(`  [LLM Service] 准备翻译文章, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.length}字符`);
 
-  // 精简版提示词
-  const systemPrompt = `
-    ${customPrompt}
-
-    ---------------------------------------------------
-    TASK: Extract and translate the article from raw webpage content.
-
-    ⚠️ CRITICAL: Output the translated article DIRECTLY. No preamble like "好的，这是..." or closing remarks.
-
-    The input contains website noise (navigation, sidebars, ads, footers, etc.) mixed with the actual article.
-    
-    You MUST:
-    1. Identify the main article body (headline + coherent paragraphs).
-    2. DISCARD all non-article content - do NOT include any noise in your output.
-    3. Translate only the article into Chinese Markdown.
-    4. Preserve article formatting (headers, bold, links, images).
-    5. Do NOT wrap output in code blocks.
-  `;
-
   // 详细版提示词
-  const systemPromptVerbose = `
-    ${customPrompt}
-  
-    ---------------------------------------------------
-    TASK: Translate the following English Markdown content into Chinese Markdown.
+  const systemPromptVerbose = `${promptToUse}
 
-    ⚠️ CRITICAL - OUTPUT FORMAT:
-    - Start your response DIRECTLY with the translated article content.
-    - Do NOT include ANY preamble, introduction, or meta-commentary such as:
-      ❌ "好的，这是翻译后的结果..."
-      ❌ "以下是翻译内容..."
-      ❌ "我已经按照要求..."
-    - Do NOT include ANY closing remarks or summary about what you did.
-    - Your ENTIRE response should be ONLY the translated article itself.
-  
-    STEP 1 - CONTENT EXTRACTION (Critical):
-    The input is raw scraped webpage content that contains BOTH the article AND website noise.
-    You MUST first mentally identify the following noise elements:
-    - Navigation menus (e.g., "Home | About | Contact | Login")
-    - Site headers/footers with repeated branding
-    - Sidebar content (categories, tags, archives, popular posts)
-    - Social sharing buttons ("Share on Twitter", "Follow us")
-    - Advertisement blocks and sponsored content
-    - Cookie/privacy notices
-    - "Related articles", "You might also like" sections
-    - Comment sections or "Leave a reply" forms
-    - Newsletter signup prompts
-  
-    ⚠️ DO NOT translate these noise elements.
-    ⚠️ DO NOT include them in your output AT ALL - not even in their original English form.
-  
-    Only extract and translate the MAIN ARTICLE BODY - typically identified by:
-    - A clear headline/title
-    - Coherent paragraphs forming a complete narrative
-    - Author byline and publication date (if present)
-  
-    STEP 2 - TRANSLATION OUTPUT:
-    1. Output ONLY the clean, translated Chinese Markdown of the article body WITH images embedded.
-    2. Your output should contain ZERO website navigation, ads, or other noise.
-    3. Do NOT wrap output in markdown code blocks.
-    4. Preserve Markdown formatting (headers, bold, italic) within the article.
-    5. Preserve links that are PART OF the article content (inline references, citations).
-    6. Translate the article title as well.
-  `;
+---------------------------------------------------
+TASK: Translate the following English Markdown content into Chinese Markdown.
+
+⚠️ CRITICAL - OUTPUT FORMAT:
+- Start your response DIRECTLY with the translated article content.
+- Do NOT include ANY preamble, introduction, or meta-commentary such as:
+  ❌ "好的，这是翻译后的结果..."
+  ❌ "以下是翻译内容..."
+  ❌ "我已经按照要求..."
+- Do NOT include ANY closing remarks or summary about what you did.
+- Your ENTIRE response should be ONLY the translated article itself.
+
+STEP 1 - CONTENT EXTRACTION (Critical):
+The input is raw scraped webpage content that contains BOTH the article AND website noise.
+You MUST first mentally identify the following noise elements:
+- Navigation menus (e.g., "Home | About | Contact | Login")
+- Site headers/footers with repeated branding
+- Sidebar content (categories, tags, archives, popular posts)
+- Social sharing buttons ("Share on Twitter", "Follow us")
+- Advertisement blocks and sponsored content
+- Cookie/privacy notices
+- "Related articles", "You might also like" sections
+- Comment sections or "Leave a reply" forms
+- Newsletter signup prompts
+
+⚠️ DO NOT translate these noise elements.
+⚠️ DO NOT include them in your output AT ALL - not even in their original English form.
+
+Only extract and translate the MAIN ARTICLE BODY - typically identified by:
+- A clear headline/title
+- Coherent paragraphs forming a complete narrative
+- Author byline and publication date (if present)
+
+STEP 2 - TRANSLATION OUTPUT:
+1. Output ONLY the clean, translated Chinese Markdown of the article body WITH images embedded.
+2. Your output should contain ZERO website navigation, ads, or other noise.
+3. Do NOT wrap output in markdown code blocks.
+4. Preserve Markdown formatting (headers, bold, italic) within the article.
+5. Preserve links that are PART OF the article content (inline references, citations).
+6. Translate the article title as well.`;
 
   const apiStartTime = Date.now();
   const content = await callLLM([
@@ -336,34 +304,25 @@ export const translateArticle = async (
 /**
  * 生成文章 TLDR 摘要
  * @param markdownContent 原始 Markdown 内容（英文）
+ * @param customPrompt 自定义提示词(可选)
  * @param storyId 文章ID(可选，用于日志)
  * @returns 中文 TLDR 摘要
  */
 export const generateTLDR = async (
   markdownContent: string,
+  customPrompt?: string,
   storyId?: number
 ): Promise<string> => {
   if (!markdownContent) return "";
 
+  const promptToUse = customPrompt ?? getPrompt('tldr');
+
   const startTime = Date.now();
   console.log(`  [LLM Service] 准备生成TLDR, storyId: ${storyId ?? 'unknown'}, 内容长度: ${markdownContent.length}字符`);
 
-  const systemPrompt = `你是一个专业的文章摘要助手。请根据用户提供的英文文章内容，生成一个简洁的中文摘要（TLDR）。
-
-要求：
-1. 摘要必须用简体中文撰写
-2. 控制在 2-4 句话，100-200 字以内
-3. 提炼文章的核心观点和关键信息
-4. 语言要通俗易懂，避免过于学术化
-5. 如果文章涉及技术概念，用简单的语言解释
-6. 直接输出摘要内容，不要加任何前缀如"摘要："或"TLDR："
-
-输出格式示例：
-这篇文章讨论了 AI 在软件开发中的应用。作者认为，虽然 AI 工具能提高编码效率，但开发者仍需保持批判性思维。文章还提到了几个实际案例，展示了 AI 辅助编程的优势和局限性。`;
-
   const apiStartTime = Date.now();
   const content = await callLLM([
-    { role: "system", content: systemPrompt },
+    { role: "system", content: promptToUse },
     { role: "user", content: markdownContent }
   ], false);
   const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(2);
@@ -387,30 +346,16 @@ interface CommentTranslationResult {
  */
 export const translateCommentsBatch = async (
   items: { id: number; text: string }[],
-  customPrompt: string = DEFAULT_PROMPT
+  customPrompt?: string
 ): Promise<CommentTranslationResult[]> => {
   if (items.length === 0) return [];
+
+  const promptToUse = customPrompt ?? getPrompt('comment');
 
   const startTime = Date.now();
   console.log(`[LLM Service] 开始批量翻译 ${items.length} 条评论`);
 
-  const systemPrompt = `你正在帮朋友翻译 HackerNews 上的评论。HN 话题很广：技术、创业、职场、科学、社会热点都有。
-
-翻译风格要求：
-1. **口语化、自然** - 像朋友聊天，不是写正式文档。用"这玩意儿"而不是"此物"，用"搞不懂"而不是"难以理解"。
-2. **保留原文的情绪和锐度** - 讽刺、吐槽、质疑、兴奋...原文是什么语气，翻译就保持什么语气。别把尖锐的观点磨成温吞水。
-3. **简洁直接** - HN 评论本身就精炼，翻译别啰嗦，别加多余的解释。
-4. **专业术语该用就用，但周围的话要说人话**。
-
-示例：
-- "This is just reinventing the wheel, but worse." → "这不就是重复造轮子吗，还造得更烂。"
-- "Mass downvote anyone who uses AI to write comments." → "用 AI 写评论的一律踩。"
-- "Skill issue." → "菜就多练。"
-- "The real question is..." → "关键问题其实是..."
-- "I've been in this industry for 20 years..." → "我在这行干了20年了..."
-
----------------------------------------------------
-TASK: Translate the HackerNews comments provided by the user.
+  const systemPrompt = `${promptToUse}
 
 CRITICAL OUTPUT INSTRUCTIONS:
 1. You MUST return valid JSON only.
@@ -426,8 +371,7 @@ Example JSON structure:
   "translations": [
     { "id": 123, "translatedText": "<p>这不就是重复造轮子吗，还造得更烂。</p>" }
   ]
-}
-  `;
+}`;
 
   const userPrompt = JSON.stringify(items);
 

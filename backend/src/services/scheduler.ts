@@ -146,8 +146,8 @@ export class SchedulerService {
       const promptHash = hashPrompt(customPrompt);
       console.log(`[Scheduler] 使用提示词哈希: ${promptHash.substring(0, 8)}...`);
 
-      // Step 3: Filter stories that need translation
-      const storiesToTranslate = await this.filterStoriesNeedingTranslation(stories, promptHash);
+      // Step 3: Filter stories that need translation (不检查 promptHash，已有翻译直接使用)
+      const storiesToTranslate = await this.filterStoriesNeedingTranslation(stories);
       console.log(`[Scheduler] ${storiesToTranslate.length} stories need translation`);
 
       if (storiesToTranslate.length === 0) {
@@ -160,11 +160,10 @@ export class SchedulerService {
       const storiesNeedingTitleTranslation: Story[] = [];
       const storiesOnlyNeedingArticle: Story[] = [];
       
+      // 已有翻译直接使用，不检查 promptHash
       const existingTitleTranslations = await this.titleTranslationRepo.findByIds(storiesToTranslate.map(s => s.id));
       const titleTranslationMap = new Map(
-        existingTitleTranslations
-          .filter(t => t.prompt_hash === promptHash)
-          .map(t => [t.story_id, t])
+        existingTitleTranslations.map(t => [t.story_id, t])
       );
       
       for (const story of storiesToTranslate) {
@@ -263,10 +262,10 @@ export class SchedulerService {
    * Requirements: 1.3, 1.4 - Check existing translations before queueing
    * 
    * 一个故事被认为"完全翻译"需要满足：
-   * 1. 标题翻译存在且 prompt_hash 匹配
+   * 1. 标题翻译存在（不检查 prompt_hash，已有翻译直接使用）
    * 2. 如果有 URL，文章翻译也必须完成 (status === 'done')
    */
-  private async filterStoriesNeedingTranslation(stories: Story[], promptHash: string): Promise<Story[]> {
+  private async filterStoriesNeedingTranslation(stories: Story[]): Promise<Story[]> {
     const storyIds = stories.map(s => s.id);
     const existingTranslations = await this.titleTranslationRepo.findByIds(storyIds);
 
@@ -287,14 +286,7 @@ export class SchedulerService {
         continue;
       }
       
-      // 2. 标题翻译的 prompt_hash 不匹配
-      if (titleTranslation.prompt_hash !== promptHash) {
-        console.log(`[Scheduler] Story ${story.id} needs translation: prompt hash changed`);
-        needTranslation.push(story);
-        continue;
-      }
-      
-      // 3. 如果有 URL，检查文章翻译是否完成
+      // 2. 如果有 URL，检查文章翻译是否完成
       if (story.url) {
         const articleTranslation = await this.articleTranslationRepo.findById(story.id);
         // 跳过已被标记为 blocked 的文章（因法律原因无法获取）
@@ -469,7 +461,7 @@ export class SchedulerService {
       // Translate article content and generate TLDR in parallel
       const [translatedMarkdown, tldr] = await Promise.all([
         translateArticle(markdown, customPrompt, story.id),
-        generateTLDR(markdown, story.id)
+        generateTLDR(markdown, undefined, story.id)
       ]);
 
       if (!translatedMarkdown) {

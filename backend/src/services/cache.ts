@@ -14,22 +14,13 @@ export function hashPrompt(prompt: string): string {
 /**
  * 获取标题翻译缓存
  * @param storyId 故事 ID
- * @param promptHash 当前提示词的哈希值
- * @returns 翻译记录或 null(如果缓存不存在或已失效)
+ * @returns 翻译记录或 null(如果缓存不存在)
  */
 export async function getTitleTranslation(
-  storyId: number,
-  promptHash: string
+  storyId: number
 ): Promise<TitleTranslation | null> {
   const repo = new TitleTranslationRepository();
-  const cached = await repo.findById(storyId);
-
-  // 如果缓存不存在或提示词已变更,返回 null
-  if (!cached || cached.prompt_hash !== promptHash) {
-    return null;
-  }
-
-  return cached;
+  return await repo.findById(storyId);
 }
 
 /**
@@ -57,18 +48,16 @@ export async function setTitleTranslation(
 /**
  * 批量获取标题翻译
  * @param storyIds 故事 ID 数组
- * @param promptHash 当前提示词哈希
  * @returns Map<storyId, titleZh>
  */
 export async function getTitleTranslationsBatch(
-  storyIds: number[],
-  promptHash: string
+  storyIds: number[]
 ): Promise<Map<number, string>> {
   const repo = new TitleTranslationRepository();
   const result = new Map<number, string>();
 
   for (const id of storyIds) {
-    const cached = await getTitleTranslation(id, promptHash);
+    const cached = await getTitleTranslation(id);
     if (cached) {
       result.set(id, cached.title_zh);
     }
@@ -151,13 +140,5 @@ export async function clearAllArticleTranslations(): Promise<void> {
   await repo.deleteAll();
 }
 
-/**
- * 清除与特定提示词哈希不匹配的标题缓存
- * 当用户更新提示词时调用此函数
- * @param newPromptHash 新的提示词哈希
- * @returns 清除的记录数
- */
-export async function invalidateOldTitleTranslations(newPromptHash: string): Promise<number> {
-  const repo = new TitleTranslationRepository();
-  return await repo.deleteByPromptHashNot(newPromptHash);
-}
+// invalidateOldTitleTranslations 已移除
+// 提示词修改不再删除旧缓存，已有翻译保留使用，新翻译使用新提示词

@@ -55,7 +55,7 @@ router.post('/titles', translationRateLimit, async (req: Request, res: Response,
       );
     }
 
-    // 获取提示词
+    // 获取提示词（用于新翻译）
     const settingsRepo = new SettingsRepository();
     const customPromptSetting = await settingsRepo.getSetting('custom_prompt');
     const customPrompt = promptOverride ||
@@ -63,8 +63,8 @@ router.post('/titles', translationRateLimit, async (req: Request, res: Response,
       DEFAULT_PROMPT;
     const promptHash = hashPrompt(customPrompt);
 
-    // 检查缓存
-    const cachedTranslations = await getTitleTranslationsBatch(ids, promptHash);
+    // 检查缓存（已有翻译直接使用，不检查 promptHash）
+    const cachedTranslations = await getTitleTranslationsBatch(ids);
 
     // 找出未命中缓存的标题
     const untranslatedStories = stories.filter((s: StoryRecord) => !cachedTranslations.has(s.story_id));

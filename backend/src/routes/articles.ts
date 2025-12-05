@@ -196,7 +196,7 @@ router.post('/:id/translate', translationRateLimit, async (req: Request, res: Re
         
         const [translatedMarkdown, tldr] = await Promise.all([
           translateArticle(markdown, customPrompt, storyId),
-          generateTLDR(markdown, storyId)
+          generateTLDR(markdown, undefined, storyId)
         ]);
         
         const translateDuration = ((Date.now() - translateStartTime) / 1000).toFixed(2);

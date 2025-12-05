@@ -2,7 +2,10 @@ import { API_BASE_URL } from '../config';
 import {
   ApiResponse,
   PromptResponseData,
-  PromptUpdateResponseData
+  PromptUpdateResponseData,
+  PromptsResponseData,
+  PromptsUpdateResponseData,
+  PromptType
 } from '../types';
 
 const SETTINGS_ENDPOINT = `${API_BASE_URL}/settings`;
@@ -39,6 +42,36 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
 
   return parseResponse<T>(response);
 };
+
+// ========== 新的多提示词 API ==========
+
+/**
+ * 获取所有提示词配置
+ */
+export const getPrompts = async (): Promise<PromptsResponseData> => {
+  return request<PromptsResponseData>('/prompts');
+};
+
+/**
+ * 更新多个提示词
+ */
+export const updatePrompts = async (
+  prompts: Partial<{ article: { prompt: string }; tldr: { prompt: string }; comment: { prompt: string } }>,
+  adminToken?: string
+): Promise<PromptsUpdateResponseData> => {
+  const headers: Record<string, string> = { ...JSON_HEADERS };
+  if (adminToken) {
+    headers.Authorization = `Bearer ${adminToken}`;
+  }
+
+  return request<PromptsUpdateResponseData>('/prompts', {
+    method: 'PUT',
+    headers,
+    body: JSON.stringify(prompts)
+  });
+};
+
+// ========== 向后兼容的单提示词 API ==========
 
 export const getPrompt = async (): Promise<PromptResponseData> => {
   return request<PromptResponseData>('/prompt');

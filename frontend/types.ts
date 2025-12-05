@@ -94,13 +94,44 @@ export interface PromptResponseData {
 
 export interface PromptUpdateResponseData {
   message: string;
-  invalidatedTitles: number;
-  promptHash?: string;
   prompt?: string;
 }
 
 export type PromptResponse = ApiResponse<PromptResponseData>;
 export type PromptUpdateResponse = ApiResponse<PromptUpdateResponseData>;
+
+// 提示词类型
+export type PromptType = 'article' | 'tldr' | 'comment';
+
+// 单个提示词配置
+export interface PromptConfig {
+  name: string;
+  description: string;
+  prompt: string;
+}
+
+// 完整的提示词配置
+export interface PromptsConfig {
+  article: PromptConfig;
+  tldr: PromptConfig;
+  comment: PromptConfig;
+}
+
+// 获取所有提示词的响应
+export interface PromptsResponseData {
+  prompts: PromptsConfig;
+  defaults: {
+    article: string;
+    tldr: string;
+    comment: string;
+  };
+}
+
+// 更新提示词的响应
+export interface PromptsUpdateResponseData {
+  message: string;
+  prompts: PromptsConfig;
+}
 
 export enum LoadingState {
   IDLE = 'IDLE',

@@ -69,23 +69,15 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
       } as ApiResponse);
     }
 
-    // 获取当前提示词哈希
-    const settingsRepo = new SettingsRepository();
-    const customPromptSetting = await settingsRepo.getSetting('custom_prompt');
-    const customPrompt = customPromptSetting?.value || DEFAULT_PROMPT;
-    const promptHash = hashPrompt(customPrompt);
-
     // 从数据库批量获取已有的标题翻译
     const titleTranslationRepo = new TitleTranslationRepository();
     const storyIds = stories.map(s => s.id);
     const translations = await titleTranslationRepo.findByIds(storyIds);
     
-    // 创建翻译映射 (只包含匹配当前 promptHash 的翻译)
+    // 创建翻译映射 (已有翻译直接使用，不检查 promptHash)
     const translationMap = new Map<number, string>();
     for (const t of translations) {
-      if (t.prompt_hash === promptHash) {
-        translationMap.set(t.story_id, t.title_zh);
-      }
+      translationMap.set(t.story_id, t.title_zh);
     }
 
     // 获取 lastUpdatedAt 从调度器状态
@@ -160,7 +152,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     if (cursor > 0 && untranslatedCount > 0) {
       console.log(`[Stories API] Load More: ${untranslatedCount} 篇文章需要翻译，触发后台翻译`);
       // 异步触发翻译，不阻塞响应
-      triggerTranslationForStories(stories, promptHash).catch(err => {
+      triggerTranslationForStories(stories).catch(err => {
         console.error('[Stories API] 触发翻译失败:', err);
       });
     }
@@ -185,24 +177,24 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
  * 为未翻译的故事触发后台翻译
  * 使用交错模式：每5条标题 → 对应文章 → 下5条标题 → 对应文章...
  */
-async function triggerTranslationForStories(stories: StoryWithRank[], promptHash: string): Promise<void> {
+async function triggerTranslationForStories(stories: StoryWithRank[]): Promise<void> {
   const titleTranslationRepo = new TitleTranslationRepository();
   const articleTranslationRepo = new ArticleTranslationRepository();
   const settingsRepo = new SettingsRepository();
   
-  // 获取当前提示词
+  // 获取当前提示词（用于新翻译）
   const customPromptSetting = await settingsRepo.getSetting('custom_prompt');
   const customPrompt = customPromptSetting?.value || DEFAULT_PROMPT;
+  const promptHash = hashPrompt(customPrompt);
 
   // 筛选需要翻译的故事，分为两类
   const storiesNeedingTitle: Story[] = [];  // 需要翻译标题的
   const storiesOnlyNeedingArticle: Story[] = [];  // 标题已翻译，只需翻译文章的
   
+  // 已有翻译直接使用，不检查 promptHash
   const existingTitleTranslations = await titleTranslationRepo.findByIds(stories.map(s => s.id));
   const titleMap = new Map(
-    existingTitleTranslations
-      .filter(t => t.prompt_hash === promptHash)
-      .map(t => [t.story_id, t])
+    existingTitleTranslations.map(t => [t.story_id, t])
   );
 
   for (const story of stories) {
