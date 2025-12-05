@@ -102,8 +102,8 @@ export const SettingsTab: React.FC<Props> = ({
         setSaving(false);
         return;
       }
-      if (isNaN(limit) || limit < 10 || limit > 100) {
-        onError('抓取数量必须在 10 到 100 之间');
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        onError('抓取数量必须在 1 到 100 之间');
         setSaving(false);
         return;
       }
@@ -260,14 +260,14 @@ export const SettingsTab: React.FC<Props> = ({
                 type="number"
                 value={storyLimit}
                 onChange={(e) => setStoryLimit(e.target.value)}
-                min="10"
+                min="1"
                 max="100"
                 className="flex-1 bg-[#1a1a1a] text-[#dcdcdc] border border-[#444] rounded px-4 py-2.5 focus:outline-none focus:border-[#ff6600] transition-colors"
               />
               <span className="text-[#828282] text-sm">条</span>
             </div>
             <p className="text-[#666] text-xs mt-2">
-              范围: 10 ~ 100 条 | 默认: {config.defaults.storyLimit} 条
+              范围: 1 ~ 100 条 | 默认: {config.defaults.storyLimit} 条
             </p>
           </div>
 

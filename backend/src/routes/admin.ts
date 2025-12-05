@@ -6,14 +6,14 @@ import { getCleanupService } from '../services/cleanup';
 import { config } from '../config';
 import { AppError, ErrorCode } from '../middleware/errorHandler';
 import { StoryRepository, TitleTranslationRepository, ArticleTranslationRepository, CommentRepository, CommentTranslationRepository, SettingsRepository } from '../db/repositories';
-import { getDatabase } from '../db/connection';
+import { getDatabase, saveDatabase } from '../db/connection';
 
 const router = Router();
 
 // 调度参数验证
 const schedulerConfigSchema = z.object({
   interval: z.number().min(60000).max(86400000).optional(), // 1分钟到24小时
-  storyLimit: z.number().min(10).max(100).optional(), // 10到100条
+  storyLimit: z.number().min(1).max(100).optional(), // 1到100条
   maxCommentTranslations: z.number().min(10).max(200).optional(), // 10到200条评论
 });
 
@@ -150,8 +150,8 @@ router.get('/scheduler-config', requireAdminAuth, async (req: Request, res: Resp
     const settingsRepo = new SettingsRepository();
 
     // 默认值
-    const DEFAULT_INTERVAL = 300000; // 5分钟
-    const DEFAULT_STORY_LIMIT = 30;
+    const DEFAULT_INTERVAL = 1800000; // 30分钟
+    const DEFAULT_STORY_LIMIT = 20;
     const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
 
     // 从数据库读取当前配置
@@ -231,8 +231,8 @@ router.post('/scheduler-config/reset', requireAdminAuth, async (req: Request, re
     const scheduler = getSchedulerService();
 
     // 默认值
-    const DEFAULT_INTERVAL = 300000; // 5分钟
-    const DEFAULT_STORY_LIMIT = 30;
+    const DEFAULT_INTERVAL = 1800000; // 30分钟
+    const DEFAULT_STORY_LIMIT = 20;
     const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
 
     // 重置数据库配置为默认值
@@ -566,6 +566,174 @@ router.post('/cleanup/trigger', requireAdminAuth, async (req: Request, res: Resp
       data: {
         message: '清理服务已触发',
         status: statusBefore,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// ============================================
+// 文章管理接口
+// ============================================
+
+/**
+ * GET /api/admin/articles
+ * 获取所有文章列表（包含评论数量）
+ */
+router.get('/articles', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const articleRepo = new ArticleTranslationRepository();
+    const commentRepo = new CommentRepository();
+    const db = await getDatabase();
+
+    // 获取所有文章（按更新时间倒序）
+    const result = db.exec(
+      `SELECT * FROM article_translations ORDER BY updated_at DESC`
+    );
+
+    if (result.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          articles: [],
+          total: 0,
+        },
+      });
+    }
+
+    const articles = result[0].values.map(row => {
+      const obj: any = {};
+      result[0].columns.forEach((col, idx) => {
+        obj[col] = row[idx];
+      });
+      return obj;
+    });
+
+    // 获取每篇文章的评论数量
+    const storyIds = articles.map(a => a.story_id);
+    const commentCounts = await commentRepo.countByStoryIds(storyIds);
+
+    // 合并评论数量
+    const articlesWithComments = articles.map(article => ({
+      ...article,
+      comment_count: commentCounts.get(article.story_id) || 0,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        articles: articlesWithComments,
+        total: articlesWithComments.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/admin/articles/:id
+ * 删除文章及其所有评论
+ */
+router.delete('/articles/:id', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const storyId = parseInt(req.params.id, 10);
+
+    if (isNaN(storyId)) {
+      throw new AppError(ErrorCode.INVALID_PARAMS, '无效的文章ID', 400);
+    }
+
+    const db = await getDatabase();
+    const commentRepo = new CommentRepository();
+    const commentTranslationRepo = new CommentTranslationRepository();
+    const articleRepo = new ArticleTranslationRepository();
+
+    // 1. 获取该文章的所有评论ID
+    const commentsResult = db.exec(
+      'SELECT comment_id FROM comments WHERE story_id = ?',
+      [storyId]
+    );
+    const commentIds = commentsResult.length > 0 
+      ? commentsResult[0].values.map(row => row[0] as number)
+      : [];
+
+    // 2. 删除评论翻译
+    if (commentIds.length > 0) {
+      await commentTranslationRepo.deleteByCommentIds(commentIds);
+    }
+
+    // 3. 删除评论
+    db.run('DELETE FROM comments WHERE story_id = ?', [storyId]);
+
+    // 4. 删除文章翻译
+    await articleRepo.delete(storyId);
+
+    saveDatabase();
+
+    console.log(`[Admin] 已删除文章 ${storyId} 及其 ${commentIds.length} 条评论`);
+
+    res.json({
+      success: true,
+      data: {
+        message: '文章及评论已删除',
+        deletedComments: commentIds.length,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * DELETE /api/admin/articles/:id/comments
+ * 删除文章的所有评论（保留文章）
+ */
+router.delete('/articles/:id/comments', requireAdminAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const storyId = parseInt(req.params.id, 10);
+
+    if (isNaN(storyId)) {
+      throw new AppError(ErrorCode.INVALID_PARAMS, '无效的文章ID', 400);
+    }
+
+    const db = await getDatabase();
+    const commentTranslationRepo = new CommentTranslationRepository();
+
+    // 1. 获取该文章的所有评论ID
+    const commentsResult = db.exec(
+      'SELECT comment_id FROM comments WHERE story_id = ?',
+      [storyId]
+    );
+    const commentIds = commentsResult.length > 0 
+      ? commentsResult[0].values.map(row => row[0] as number)
+      : [];
+
+    if (commentIds.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          message: '该文章没有评论',
+          deletedComments: 0,
+        },
+      });
+    }
+
+    // 2. 删除评论翻译
+    await commentTranslationRepo.deleteByCommentIds(commentIds);
+
+    // 3. 删除评论
+    db.run('DELETE FROM comments WHERE story_id = ?', [storyId]);
+
+    saveDatabase();
+
+    console.log(`[Admin] 已删除文章 ${storyId} 的 ${commentIds.length} 条评论`);
+
+    res.json({
+      success: true,
+      data: {
+        message: '评论已删除',
+        deletedComments: commentIds.length,
       },
     });
   } catch (error) {

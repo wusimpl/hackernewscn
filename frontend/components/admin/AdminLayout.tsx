@@ -6,8 +6,9 @@ import { SettingsTab } from './SettingsTab';
 import { LLMProvidersTab } from './LLMProvidersTab';
 import { PromptTab } from './PromptTab';
 import { DatabaseTab } from './DatabaseTab';
+import { ArticlesTab } from './ArticlesTab';
 
-export type AdminTab = 'dashboard' | 'settings' | 'llm-providers' | 'prompt' | 'database';
+export type AdminTab = 'dashboard' | 'settings' | 'llm-providers' | 'prompt' | 'database' | 'articles';
 
 interface SchedulerStatus {
   isRunning: boolean;
@@ -189,6 +190,14 @@ export const AdminLayout: React.FC = () => {
       case 'database':
         return (
           <DatabaseTab
+            password={password}
+            onMessage={showMessage}
+            onError={showError}
+          />
+        );
+      case 'articles':
+        return (
+          <ArticlesTab
             password={password}
             onMessage={showMessage}
             onError={showError}

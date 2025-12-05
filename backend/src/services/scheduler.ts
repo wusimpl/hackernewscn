@@ -13,8 +13,8 @@ import { Story, CommentRecord } from '../types';
 async function getSchedulerConfig(): Promise<{ interval: number; storyLimit: number; maxCommentTranslations: number }> {
   const settingsRepo = new SettingsRepository();
   
-  const DEFAULT_INTERVAL = 300000; // 5分钟
-  const DEFAULT_STORY_LIMIT = 30;
+  const DEFAULT_INTERVAL = 1800000; // 30分钟
+  const DEFAULT_STORY_LIMIT = 20;
   const DEFAULT_MAX_COMMENT_TRANSLATIONS = 50;
   
   const [intervalStr, storyLimitStr, maxCommentTranslationsStr] = await Promise.all([

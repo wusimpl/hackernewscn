@@ -6,3 +6,4 @@ export { SettingsTab } from './SettingsTab';
 export { LLMProvidersTab } from './LLMProvidersTab';
 export { PromptTab } from './PromptTab';
 export { DatabaseTab } from './DatabaseTab';
+export { ArticlesTab } from './ArticlesTab';

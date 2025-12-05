@@ -262,6 +262,8 @@ export const translateArticle = async (
     ---------------------------------------------------
     TASK: Extract and translate the article from raw webpage content.
 
+    ⚠️ CRITICAL: Output the translated article DIRECTLY. No preamble like "好的，这是..." or closing remarks.
+
     The input contains website noise (navigation, sidebars, ads, footers, etc.) mixed with the actual article.
     
     You MUST:
@@ -278,6 +280,15 @@ export const translateArticle = async (
   
     ---------------------------------------------------
     TASK: Translate the following English Markdown content into Chinese Markdown.
+
+    ⚠️ CRITICAL - OUTPUT FORMAT:
+    - Start your response DIRECTLY with the translated article content.
+    - Do NOT include ANY preamble, introduction, or meta-commentary such as:
+      ❌ "好的，这是翻译后的结果..."
+      ❌ "以下是翻译内容..."
+      ❌ "我已经按照要求..."
+    - Do NOT include ANY closing remarks or summary about what you did.
+    - Your ENTIRE response should be ONLY the translated article itself.
   
     STEP 1 - CONTENT EXTRACTION (Critical):
     The input is raw scraped webpage content that contains BOTH the article AND website noise.
