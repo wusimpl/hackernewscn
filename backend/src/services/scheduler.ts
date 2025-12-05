@@ -79,12 +79,6 @@ export class SchedulerService {
     }
 
     const schedulerConfig = await getSchedulerConfig();
-    console.log(`[Scheduler] Starting with interval: ${schedulerConfig.interval / 1000}s, storyLimit: ${schedulerConfig.storyLimit}`);
-
-    // Run immediately on start (disabled - wait for first scheduled interval)
-    // this.runOnce().catch(err => {
-    //   console.error('[Scheduler] Initial run failed:', err);
-    // });
 
     // 计算下次执行时间（固定时间点）
     this.nextRunAt = Date.now() + schedulerConfig.interval;
@@ -101,7 +95,7 @@ export class SchedulerService {
     }, schedulerConfig.interval);
 
     this.isRunning = true;
-    console.log('[Scheduler] Started successfully');
+    console.log(`[Scheduler] 服务已启动: interval=${schedulerConfig.interval / 1000}s, storyLimit=${schedulerConfig.storyLimit}`);
   }
 
   /**
@@ -819,16 +813,6 @@ export class CommentRefreshService {
       return;
     }
 
-    console.log(`[CommentRefresh] 启动服务: interval=${refreshConfig.interval / 1000}s, storyLimit=${refreshConfig.storyLimit}, batchSize=${refreshConfig.batchSize}`);
-
-    // 启动时不立即执行，等待第一个完整的间隔周期
-    // 如果需要启动后立即执行一次，可以取消下面的注释
-    // setTimeout(() => {
-    //   this.runOnce().catch(err => {
-    //     console.error('[CommentRefresh] 首次运行失败:', err);
-    //   });
-    // }, 30000);
-
     this.nextRunAt = Date.now() + refreshConfig.interval;
 
     this.intervalId = setInterval(() => {
@@ -842,7 +826,7 @@ export class CommentRefreshService {
     }, refreshConfig.interval);
 
     this.isRunning = true;
-    console.log('[CommentRefresh] 服务启动成功');
+    console.log(`[CommentRefresh] 服务已启动: interval=${refreshConfig.interval / 1000}s, storyLimit=${refreshConfig.storyLimit}, batchSize=${refreshConfig.batchSize}`);
   }
 
   /**

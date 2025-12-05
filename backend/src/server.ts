@@ -50,21 +50,15 @@ async function startServer() {
     await initDatabase();
     console.log('✅ 数据库初始化成功');
 
-    // Initialize and start the scheduler after database init
-    // Requirements: 1.1 - Scheduler starts and immediately fetches stories
+    // Initialize and start background services
     const scheduler = getSchedulerService();
-    scheduler.start();
-    console.log('✅ 调度器启动成功');
+    await scheduler.start();
 
-    // Initialize and start the comment refresh service
     const commentRefresh = getCommentRefreshService();
-    commentRefresh.start();
-    console.log('✅ 评论刷新服务启动成功');
+    await commentRefresh.start();
 
-    // Initialize and start the cleanup service
     const cleanup = getCleanupService();
-    cleanup.start();
-    console.log('✅ 数据清理服务启动成功');
+    await cleanup.start();
 
     const server = app.listen(config.port, () => {
       console.log(`\n🚀 服务器运行在端口 ${config.port}`);

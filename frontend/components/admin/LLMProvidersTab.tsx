@@ -6,6 +6,7 @@ interface LLMProvider {
   model: string;
   api_key_masked: string;
   description?: string;
+  is_thinking_model?: boolean;
 }
 
 interface LLMProvidersData {
@@ -29,6 +30,7 @@ interface ProviderModalProps {
     model: string;
     api_key: string;
     description?: string;
+    is_thinking_model?: boolean;
   }) => Promise<void>;
   onTest: (data: { api_base: string; model: string; api_key: string }) => Promise<void>;
   saving: boolean;
@@ -51,6 +53,7 @@ const ProviderModal: React.FC<ProviderModalProps> = ({
   const [formModel, setFormModel] = useState('');
   const [formApiKey, setFormApiKey] = useState('');
   const [formDescription, setFormDescription] = useState('');
+  const [formIsThinkingModel, setFormIsThinkingModel] = useState(false);
 
   useEffect(() => {
     if (editingProvider) {
@@ -59,12 +62,14 @@ const ProviderModal: React.FC<ProviderModalProps> = ({
       setFormModel(editingProvider.model);
       setFormApiKey('');
       setFormDescription(editingProvider.description || '');
+      setFormIsThinkingModel(editingProvider.is_thinking_model || false);
     } else {
       setFormName('');
       setFormApiBase('');
       setFormModel('');
       setFormApiKey('');
       setFormDescription('');
+      setFormIsThinkingModel(false);
     }
   }, [editingProvider, isOpen]);
 
@@ -76,7 +81,8 @@ const ProviderModal: React.FC<ProviderModalProps> = ({
       api_base: formApiBase,
       model: formModel,
       api_key: formApiKey,
-      description: formDescription || undefined
+      description: formDescription || undefined,
+      is_thinking_model: formIsThinkingModel
     });
   };
 
@@ -172,6 +178,22 @@ const ProviderModal: React.FC<ProviderModalProps> = ({
               placeholder="如: 速度与质量平衡"
               className="w-full bg-[#121212] text-[#dcdcdc] border border-[#444] rounded px-3 py-2 focus:outline-none focus:border-[#ff6600]"
             />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formIsThinkingModel}
+                onChange={(e) => setFormIsThinkingModel(e.target.checked)}
+                className="sr-only peer"
+              />
+              <div className="w-11 h-6 bg-[#333] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#ff6600]"></div>
+            </label>
+            <div>
+              <span className="text-[#dcdcdc] text-sm">推理模型</span>
+              <p className="text-[#666] text-xs">启用后自动移除返回内容中的 &lt;think&gt; 思维链</p>
+            </div>
           </div>
 
           {/* 测试连通性 */}
@@ -358,15 +380,17 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
     model: string;
     api_key: string;
     description?: string;
+    is_thinking_model?: boolean;
   }) => {
     if (!editingProvider) return;
 
-    const updates: Record<string, string> = {};
+    const updates: Record<string, string | boolean> = {};
     if (formData.name) updates.name = formData.name;
     if (formData.api_base) updates.api_base = formData.api_base;
     if (formData.model) updates.model = formData.model;
     if (formData.api_key) updates.api_key = formData.api_key;
     if (formData.description !== undefined) updates.description = formData.description || '';
+    if (formData.is_thinking_model !== undefined) updates.is_thinking_model = formData.is_thinking_model;
 
     if (Object.keys(updates).length === 0) {
       onError('请至少修改一个字段');
@@ -487,6 +511,9 @@ export const LLMProvidersTab: React.FC<Props> = ({ password, onMessage, onError 
                     <div>Key: <span className="text-[#aaa]">{provider.api_key_masked}</span></div>
                     {provider.description && (
                       <div>描述: <span className="text-[#aaa]">{provider.description}</span></div>
+                    )}
+                    {provider.is_thinking_model && (
+                      <div><span className="bg-[#333] text-[#aaa] text-xs px-2 py-0.5 rounded">推理模型</span></div>
                     )}
                   </div>
                 </div>

@@ -21,7 +21,8 @@ const providerSchema = z.object({
   api_base: z.string().url(),
   model: z.string().min(1).max(100),
   api_key: z.string().min(1),
-  description: z.string().max(200).optional()
+  description: z.string().max(200).optional(),
+  is_thinking_model: z.boolean().optional()
 });
 
 const updateProviderSchema = z.object({
@@ -29,7 +30,8 @@ const updateProviderSchema = z.object({
   api_base: z.string().url().optional(),
   model: z.string().min(1).max(100).optional(),
   api_key: z.string().min(1).optional(),
-  description: z.string().max(200).optional()
+  description: z.string().max(200).optional(),
+  is_thinking_model: z.boolean().optional()
 });
 
 /**

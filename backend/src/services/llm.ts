@@ -34,19 +34,28 @@ interface TranslationResult {
 /**
  * 获取当前 LLM 配置（优先使用 JSON 配置，回退到 .env）
  */
-function getLLMSettings(): { apiKey: string; baseUrl: string; model: string } | null {
+function getLLMSettings(): { apiKey: string; baseUrl: string; model: string; isThinkingModel: boolean } | null {
   // 优先从 JSON 配置获取
   const provider = getCurrentProvider();
   if (provider && provider.api_key) {
     return {
       apiKey: provider.api_key,
       baseUrl: provider.api_base,
-      model: provider.model
+      model: provider.model,
+      isThinkingModel: provider.is_thinking_model ?? false
     };
   }
   
   // 没有配置的 LLM 提供商
   return null;
+}
+
+/**
+ * 移除推理模型返回内容中的思维链 <think>...</think>
+ */
+function stripThinkingContent(content: string): string {
+  // 匹配 <think>...</think> 标签及其内容（支持多行）
+  return content.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 }
 
 /**
@@ -107,7 +116,14 @@ async function callLLM(
       }
 
       const data = await response.json() as any;
-      return data.choices?.[0]?.message?.content || null;
+      let responseContent = data.choices?.[0]?.message?.content || null;
+      
+      // 如果是推理模型，移除思维链内容
+      if (responseContent && llmSettings.isThinkingModel) {
+        responseContent = stripThinkingContent(responseContent);
+      }
+      
+      return responseContent;
 
     } catch (error) {
       lastError = error;

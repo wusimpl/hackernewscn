@@ -166,6 +166,7 @@ export interface LLMProvider {
   model: string;
   api_key: string;
   description?: string;
+  is_thinking_model?: boolean; // 是否为推理模型（返回内容包含 <think></think> 思维链）
 }
 
 // LLM 配置文件结构

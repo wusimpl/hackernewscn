@@ -140,6 +140,7 @@ export function getProvidersForDisplay(): (Omit<LLMProvider, 'api_key'> & { api_
     api_base: p.api_base,
     model: p.model,
     description: p.description,
+    is_thinking_model: p.is_thinking_model,
     api_key_masked: maskApiKey(p.api_key)
   }));
 }

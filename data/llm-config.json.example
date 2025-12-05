@@ -6,14 +6,24 @@
       "api_base": "https://api.deepseek.com/v1",
       "model": "deepseek-chat",
       "api_key": "your-api-key-here",
-      "description": "介绍"
+      "description": "介绍",
+      "is_thinking_model": false
+    },
+    {
+      "name": "Deepseek R1",
+      "api_base": "https://api.deepseek.com/v1",
+      "model": "deepseek-reasoner",
+      "api_key": "your-api-key-here",
+      "description": "推理模型",
+      "is_thinking_model": true
     },
     {
       "name": "OpenAI GPT-4",
       "api_base": "https://api.openai.com/v1",
       "model": "gpt-4o",
       "api_key": "your-openai-key-here",
-      "description": "介绍"
+      "description": "介绍",
+      "is_thinking_model": false
     }
   ]
 }

@@ -59,8 +59,6 @@ export class CleanupService {
       return;
     }
 
-    console.log(`[Cleanup] 启动服务: interval=${CLEANUP_CONFIG.interval / 1000 / 60 / 60}h`);
-
     // 不立即执行清理，等待下一次定时检查
     this.nextRunAt = Date.now() + CLEANUP_CONFIG.interval;
 
@@ -72,7 +70,7 @@ export class CleanupService {
     }, CLEANUP_CONFIG.interval);
 
     this.isRunning = true;
-    console.log('[Cleanup] 服务启动成功');
+    console.log(`[Cleanup] 服务已启动: interval=${CLEANUP_CONFIG.interval / 1000 / 60 / 60}h`);
   }
 
   /**
