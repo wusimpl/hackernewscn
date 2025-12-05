@@ -51,6 +51,9 @@ export const ArticlesTab: React.FC<Props> = ({ password, onMessage, onError }) =
   const [page, setPage] = useState(1);
   const [deleting, setDeleting] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: number; type: 'article' | 'comments' } | null>(null);
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const [confirmBatchDelete, setConfirmBatchDelete] = useState<'articles' | 'comments' | null>(null);
 
   const fetchArticles = async () => {
     setLoading(true);
@@ -137,6 +140,107 @@ export const ArticlesTab: React.FC<Props> = ({ password, onMessage, onError }) =
     }
   };
 
+  // 批量选择相关
+  const toggleSelect = (storyId: number) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(storyId)) {
+        next.delete(storyId);
+      } else {
+        next.add(storyId);
+      }
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const pageIds = paginated.map(a => a.story_id);
+    const allSelected = pageIds.every(id => selected.has(id));
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (allSelected) {
+        pageIds.forEach(id => next.delete(id));
+      } else {
+        pageIds.forEach(id => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelected(new Set());
+
+  // 批量删除文章
+  const handleBatchDeleteArticles = async () => {
+    if (selected.size === 0) return;
+    setBatchDeleting(true);
+    let successCount = 0;
+    let totalComments = 0;
+    const ids = Array.from(selected);
+    
+    for (const storyId of ids) {
+      try {
+        const res = await fetch(`${API_BASE}/admin/articles/${storyId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${password}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          successCount++;
+          totalComments += data.data.deletedComments || 0;
+        }
+      } catch {
+        // 继续处理其他
+      }
+    }
+    
+    if (successCount > 0) {
+      onMessage(`已删除 ${successCount} 篇文章，共 ${totalComments} 条评论`);
+      setArticles(prev => prev.filter(a => !selected.has(a.story_id)));
+      setSelected(new Set());
+    } else {
+      onError('批量删除失败');
+    }
+    setBatchDeleting(false);
+    setConfirmBatchDelete(null);
+  };
+
+  // 批量删除评论
+  const handleBatchDeleteComments = async () => {
+    if (selected.size === 0) return;
+    setBatchDeleting(true);
+    let successCount = 0;
+    let totalComments = 0;
+    const ids = Array.from(selected);
+    
+    for (const storyId of ids) {
+      try {
+        const res = await fetch(`${API_BASE}/admin/articles/${storyId}/comments`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${password}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          successCount++;
+          totalComments += data.data.deletedComments || 0;
+        }
+      } catch {
+        // 继续处理其他
+      }
+    }
+    
+    if (successCount > 0) {
+      onMessage(`已处理 ${successCount} 篇文章，共删除 ${totalComments} 条评论`);
+      setArticles(prev => prev.map(a => 
+        selected.has(a.story_id) ? { ...a, comment_count: 0 } : a
+      ));
+      setSelected(new Set());
+    } else {
+      onError('批量删除失败');
+    }
+    setBatchDeleting(false);
+    setConfirmBatchDelete(null);
+  };
+
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       done: 'bg-green-900/50 text-green-400 border-green-700',
@@ -183,10 +287,41 @@ export const ArticlesTab: React.FC<Props> = ({ password, onMessage, onError }) =
         />
       </div>
 
-      {/* Stats */}
-      <div className="mb-4 text-sm text-[#828282]">
-        共 {filtered.length} 篇文章
-        {search && ` (搜索结果)`}
+      {/* Stats & Batch Actions */}
+      <div className="mb-4 flex items-center justify-between flex-wrap gap-2">
+        <div className="text-sm text-[#828282]">
+          共 {filtered.length} 篇文章
+          {search && ` (搜索结果)`}
+          {selected.size > 0 && (
+            <span className="ml-2 text-[#ff6600]">
+              · 已选 {selected.size} 篇
+            </span>
+          )}
+        </div>
+        {selected.size > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={clearSelection}
+              className="px-2 py-1 text-xs text-[#828282] hover:text-[#dcdcdc] transition-colors"
+            >
+              取消选择
+            </button>
+            <button
+              onClick={() => setConfirmBatchDelete('comments')}
+              disabled={batchDeleting}
+              className="px-3 py-1.5 text-xs bg-yellow-900/30 text-yellow-400 border border-yellow-700/50 rounded hover:bg-yellow-900/50 transition-colors disabled:opacity-50"
+            >
+              批量删除评论
+            </button>
+            <button
+              onClick={() => setConfirmBatchDelete('articles')}
+              disabled={batchDeleting}
+              className="px-3 py-1.5 text-xs bg-red-900/30 text-red-400 border border-red-700/50 rounded hover:bg-red-900/50 transition-colors disabled:opacity-50"
+            >
+              批量删除文章
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Article List */}
@@ -199,12 +334,29 @@ export const ArticlesTab: React.FC<Props> = ({ password, onMessage, onError }) =
           </div>
         ) : (
           <div className="divide-y divide-[#333]">
+            {/* Select All Header */}
+            <div className="px-4 py-2 bg-[#242424] flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={paginated.length > 0 && paginated.every(a => selected.has(a.story_id))}
+                onChange={toggleSelectAll}
+                className="w-4 h-4 accent-[#ff6600] cursor-pointer"
+              />
+              <span className="text-xs text-[#828282]">全选当前页</span>
+            </div>
             {paginated.map((article, idx) => (
               <div
                 key={article.story_id}
-                className="p-4 hover:bg-[#242424] transition-colors"
+                className={`p-4 hover:bg-[#242424] transition-colors ${selected.has(article.story_id) ? 'bg-[#2a2a2a]' : ''}`}
               >
                 <div className="flex items-start gap-3">
+                  {/* Checkbox */}
+                  <input
+                    type="checkbox"
+                    checked={selected.has(article.story_id)}
+                    onChange={() => toggleSelect(article.story_id)}
+                    className="w-4 h-4 mt-1 accent-[#ff6600] cursor-pointer flex-shrink-0"
+                  />
                   {/* Index */}
                   <div className="text-[#666] text-sm font-mono min-w-[30px] pt-0.5">
                     {(page - 1) * PAGE_SIZE + idx + 1}.
@@ -302,7 +454,7 @@ export const ArticlesTab: React.FC<Props> = ({ password, onMessage, onError }) =
         </div>
       )}
 
-      {/* Confirm Dialog */}
+      {/* Confirm Dialog - Single */}
       {confirmDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="bg-[#1a1a1a] border border-[#333] rounded-lg p-6 max-w-md w-full mx-4">
@@ -332,6 +484,44 @@ export const ArticlesTab: React.FC<Props> = ({ password, onMessage, onError }) =
                 className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
               >
                 确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm Dialog - Batch */}
+      {confirmBatchDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#1a1a1a] border border-[#333] rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold text-[#dcdcdc] mb-4">
+              确认批量{confirmBatchDelete === 'articles' ? '删除文章' : '删除评论'}
+            </h3>
+            <p className="text-[#828282] text-sm mb-6">
+              {confirmBatchDelete === 'articles'
+                ? `即将删除 ${selected.size} 篇文章及其所有评论，此操作不可恢复。`
+                : `即将删除 ${selected.size} 篇文章的所有评论，此操作不可恢复。`}
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmBatchDelete(null)}
+                disabled={batchDeleting}
+                className="px-4 py-2 text-sm text-[#828282] hover:text-[#dcdcdc] transition-colors disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmBatchDelete === 'articles') {
+                    handleBatchDeleteArticles();
+                  } else {
+                    handleBatchDeleteComments();
+                  }
+                }}
+                disabled={batchDeleting}
+                className="px-4 py-2 text-sm bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {batchDeleting ? '删除中...' : '确认删除'}
               </button>
             </div>
           </div>
