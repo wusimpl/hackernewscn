@@ -19,7 +19,7 @@ export interface PromptsConfig {
 }
 
 // 配置文件路径
-const CONFIG_PATH = path.join(process.cwd(), 'data', 'prompts-config.json');
+const CONFIG_PATH = path.join(__dirname, '../../data/prompts-config.json');
 
 // 默认提示词配置
 const DEFAULT_PROMPTS: PromptsConfig = {

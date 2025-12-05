@@ -28,8 +28,8 @@ build/
 *.db-wal
 *.sqlite
 *.sqlite3
-data/*.db
-data/llm-config.json
+backend/data/*.db
+backend/data/llm-config.json
 
 # ===========================
 # Logs

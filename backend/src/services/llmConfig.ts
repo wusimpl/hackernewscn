@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { LLMConfig, LLMProvider } from '../types';
 
-const CONFIG_PATH = path.join(__dirname, '../../../data/llm-config.json');
+const CONFIG_PATH = path.join(__dirname, '../../data/llm-config.json');
 
 // 默认配置
 const DEFAULT_CONFIG: LLMConfig = {

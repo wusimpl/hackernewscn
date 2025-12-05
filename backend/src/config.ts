@@ -8,7 +8,7 @@ export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
 
   // 数据库配置
-  dbPath: process.env.DB_PATH || path.join(__dirname, '../../data/hackernews.db'),
+  dbPath: process.env.DB_PATH || path.join(__dirname, '../data/hackernews.db'),
 
   // 任务队列配置
   queue: {
