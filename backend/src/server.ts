@@ -12,6 +12,9 @@ import { getCleanupService } from './services/cleanup';
 
 const app = express();
 
+// 信任代理（用于正确获取客户端 IP，解决 express-rate-limit 的 X-Forwarded-For 问题）
+app.set('trust proxy', 1);
+
 // 基础中间件
 app.use(cors());
 app.use(express.json());
