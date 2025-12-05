@@ -394,27 +394,39 @@ export const translateCommentsBatch = async (
   const startTime = Date.now();
   console.log(`[LLM Service] 开始批量翻译 ${items.length} 条评论`);
 
-  const systemPrompt = `
-    ${customPrompt}
+  const systemPrompt = `你正在帮朋友翻译 HackerNews 上的评论。HN 话题很广：技术、创业、职场、科学、社会热点都有。
 
-    ---------------------------------------------------
-    TASK: Translate the HackerNews comments provided by the user.
+翻译风格要求：
+1. **口语化、自然** - 像朋友聊天，不是写正式文档。用"这玩意儿"而不是"此物"，用"搞不懂"而不是"难以理解"。
+2. **保留原文的情绪和锐度** - 讽刺、吐槽、质疑、兴奋...原文是什么语气，翻译就保持什么语气。别把尖锐的观点磨成温吞水。
+3. **简洁直接** - HN 评论本身就精炼，翻译别啰嗦，别加多余的解释。
+4. **专业术语该用就用，但周围的话要说人话**。
 
-    CRITICAL OUTPUT INSTRUCTIONS:
-    1. You MUST return valid JSON only.
-    2. The root object MUST have a property "translations" which is an array.
-    3. Each item in the array must contain:
-       - "id": The original number ID.
-       - "translatedText": The Chinese translation of the comment.
-    4. Comments may contain HTML tags (like <p>, <a>, <code>, <pre>, <i>). Preserve these HTML tags exactly as they are, only translate the text content within them.
-    5. Preserve any code snippets, URLs, and technical terms.
+示例：
+- "This is just reinventing the wheel, but worse." → "这不就是重复造轮子吗，还造得更烂。"
+- "Mass downvote anyone who uses AI to write comments." → "用 AI 写评论的一律踩。"
+- "Skill issue." → "菜就多练。"
+- "The real question is..." → "关键问题其实是..."
+- "I've been in this industry for 20 years..." → "我在这行干了20年了..."
 
-    Example JSON structure:
-    {
-      "translations": [
-        { "id": 123, "translatedText": "<p>这是翻译后的评论...</p>" }
-      ]
-    }
+---------------------------------------------------
+TASK: Translate the HackerNews comments provided by the user.
+
+CRITICAL OUTPUT INSTRUCTIONS:
+1. You MUST return valid JSON only.
+2. The root object MUST have a property "translations" which is an array.
+3. Each item in the array must contain:
+   - "id": The original number ID.
+   - "translatedText": The Chinese translation of the comment.
+4. Comments may contain HTML tags (like <p>, <a>, <code>, <pre>, <i>). Preserve these HTML tags exactly as they are, only translate the text content within them.
+5. Preserve any code snippets, URLs, and technical terms.
+
+Example JSON structure:
+{
+  "translations": [
+    { "id": 123, "translatedText": "<p>这不就是重复造轮子吗，还造得更烂。</p>" }
+  ]
+}
   `;
 
   const userPrompt = JSON.stringify(items);
